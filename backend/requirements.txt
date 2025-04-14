@@ -10,3 +10,5 @@ requests
 Pillow
 python-multipart 
 langchain_groq
+#groq 
+openai==1.58.1

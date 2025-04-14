@@ -10,7 +10,7 @@ from transformers import BlipProcessor, BlipForConditionalGeneration  # AutoProc
 from mistralai import Mistral  # Ensure this package is installed
 import pyttsx3
 import requests  # In case needed later; kept for debugging/logging purposes
-
+from openai import OpenAI
 from PIL import Image
 from langchain_groq import ChatGroq  # New import for ChatGroq integration
 
@@ -41,8 +41,7 @@ class SurroundingAwarenessProcessor:
         try:
             # logger.debug("Loading BLIP processor and model...")
             self.blip_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-            #self.blip_processor = AutoProcessor.from_pretrained("Salesforce/blip-vqa-base")
-            #self.blip_model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
+            
             self.blip_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(device)
             # logger.debug("BLIP model loaded successfully.")
         except Exception as e:
@@ -87,6 +86,7 @@ class SurroundingAwarenessProcessor:
             logger.error(f"Failed to initialize ChatGroq LLM: {e}")
             raise
 
+        
         # System prompt for LLM summarization (currently not used directly)
         # self.system_prompt = """ ... """
 
@@ -264,3 +264,6 @@ class SurroundingAwarenessProcessor:
         except Exception as e:
             logger.error(f"Error generating audio: {e}")
             return False
+        
+
+# The below functions are to process 
