@@ -104,7 +104,7 @@ The app will:
 ## Project Overview
 
 ### Project Overflow
-![Project Overflow](project_overflow.svg)
+![Complete Project Overflow](project_overflow.svg)
 
 ### Problem Statement
 
