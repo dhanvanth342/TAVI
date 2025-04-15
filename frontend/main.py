@@ -1,4 +1,3 @@
-# main.py
 import os
 import uuid
 import threading
@@ -6,14 +5,15 @@ import time
 import json
 import requests
 import wave
-import numpy as np 
+import cv2  # OpenCV for video recording
+
+import numpy as np
 from kivy.clock import Clock
 from kivy.app import App
 from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
-from kivy.uix.scrollview import ScrollView
-from kivy.uix.image import Image
+from kivy.uix.video import Video   # To display video in the UI
 from kivy.core.audio import SoundLoader
 
 import pyaudio
@@ -21,13 +21,13 @@ import pvporcupine
 
 from config import BACKEND_URL, PORCUPINE_KEY
 
-# KV string for a simple chat UI layout (or load from chat.kv)
+# KV string for a simple chat UI layout
 KV = '''
 <ChatScreen>:
     orientation: 'vertical'
     ScrollView:
         id: scroll_view
-        do_scroll_x: False
+        do_scroll_x: True
         do_scroll_y: True
         BoxLayout:
             id: chat_box
@@ -49,21 +49,17 @@ class ChatScreen(BoxLayout):
 class MyKivyApp(App):
     def build(self):
         self.chat_screen = ChatScreen()
-        # Start wake word detection in a separate thread
         threading.Thread(target=self.wake_word_listener, daemon=True).start()
         return self.chat_screen
 
     def add_message(self, message, sender="system"):
         lbl = Label(text=f"[{sender}] {message}", markup=True, size_hint_y=None, height='30dp')
         self.chat_screen.ids.chat_box.add_widget(lbl)
-        # Scroll to bottom:
         Clock.schedule_once(lambda dt: setattr(self.chat_screen.ids.scroll_view, 'scroll_y', 0))
 
     def wake_word_listener(self):
         """
-        Use pvporcupine to listen for a wake word to start and a stop phrase to end recording.
-        (For custom wake words like "Hello Assistant" and "I am done Assistant", custom keyword models are required.
-        Here we use a built-in keyword "ok google" as a demo.)
+        Listens for the wake word "Jarvis" using Porcupine and starts recording audio when detected.   
         """
         try:
             porcupine = pvporcupine.create(access_key=PORCUPINE_KEY, keywords=["jarvis"])
@@ -75,24 +71,21 @@ class MyKivyApp(App):
                 input=True,
                 frames_per_buffer=porcupine.frame_length
             )
-            Clock.schedule_once(lambda dt: self.add_message("Listening for wake word...", sender="app"))
+            Clock.schedule_once(lambda dt: self.add_message("Hi there! Just say 'Jarvis' to get started.", sender="app"))
             while True:
                 pcm = audio_stream.read(porcupine.frame_length)
-                pcm = np.frombuffer(pcm, dtype=np.int16)  # Convert bytes to an array of int16
+                pcm = np.frombuffer(pcm, dtype=np.int16)
                 result = porcupine.process(pcm)
-
                 if result >= 0:
-                    Clock.schedule_once(lambda dt: self.add_message("Wake word detected! Start recording...", sender="app"))
+                    Clock.schedule_once(lambda dt: self.add_message("Hello! This is Jarvis. How can I make your day easier", sender="app"))
                     self.record_audio()
                 time.sleep(0.01)
         except Exception as e:
-            # Capture 'e' in lambda default argument to prevent NameError
             Clock.schedule_once(lambda dt, err=e: self.add_message(f"Error in wake word detection: {err}", sender="error"))
 
     def record_audio(self):
         """
-        Records audio from the microphone until the stop phrase is detected.
-        For simplicity, this simulation records for a fixed duration of 5 seconds.
+        Records audio from the microphone (simulated for 5 seconds) and sends it to the backend.
         """
         CHUNK = 1024
         FORMAT = pyaudio.paInt16
@@ -101,19 +94,16 @@ class MyKivyApp(App):
         
         pa = pyaudio.PyAudio()
         stream = pa.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
-        
         frames = []
-        Clock.schedule_once(lambda dt: self.add_message("Recording... (simulated for 5 seconds)", sender="app"))
-        record_seconds = 5
+        Clock.schedule_once(lambda dt: self.add_message("You've got my attention. I'm listening for the next 8 seconds.", sender="app"))
+        record_seconds = 8
         for i in range(0, int(RATE / CHUNK * record_seconds)):
             data = stream.read(CHUNK)
             frames.append(data)
-        
         stream.stop_stream()
         stream.close()
         pa.terminate()
         
-        # Save the recorded audio to a temporary file
         temp_dir = "temp_uploads"
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir)
@@ -130,7 +120,7 @@ class MyKivyApp(App):
     
     def send_audio_to_backend(self, audio_filepath):
         """
-        Posts the recorded audio file to the /process_audio/ endpoint and processes the response.
+        Posts the recorded audio file to the /process_audio/ endpoint.
         """
         try:
             files = {'file': open(audio_filepath, 'rb')}
@@ -152,7 +142,6 @@ class MyKivyApp(App):
         data2 = data.get("data2", "")
         data3 = data.get("data3", "")  # Relative URL (e.g., "/download_audio/filename.mp3")
         
-        # Build full audio URL
         audio_url = f"{BACKEND_URL}{data3}"
         transcript = data.get("transcript", "")
         
@@ -161,7 +150,7 @@ class MyKivyApp(App):
         
         if data1.get("Record"):
             Clock.schedule_once(lambda dt: self.add_message("Record intent detected. Launching video capture...", sender="app"))
-            self.capture_video()
+            self.capture_video()  # Launch video capture
         else:
             Clock.schedule_once(lambda dt: self.add_message("Playing response audio...", sender="app"))
             self.play_audio(audio_url)
@@ -170,7 +159,7 @@ class MyKivyApp(App):
     
     def play_audio(self, audio_url):
         """
-        Loads and plays the audio from the given URL using Kivy's SoundLoader.
+        Loads and plays the audio using Kivy's SoundLoader.
         """
         sound = SoundLoader.load(audio_url)
         if sound:
@@ -180,20 +169,70 @@ class MyKivyApp(App):
     
     def capture_video(self):
         """
-        Simulates video capture and processing.
-        In production, integrate with a camera API (e.g., Plyer) to record video and send it to the backend.
+        Captures video for 5 seconds using the webcam (via OpenCV), sends it to the backend,
+        and updates the chat UI with the video summary and plays the TTS audio.
+        The recorded video is displayed in the UI using a Kivy Video widget.
         """
-        Clock.schedule_once(lambda dt: self.add_message("Video capture simulated: recording video...", sender="app"))
-        import time
-        time.sleep(3)
-        Clock.schedule_once(lambda dt: self.add_message("Video recorded. Sending video to backend...", sender="app"))
-        dummy_response = {
-            "text_summary": "You are in a large room filled with a crowd...",
-            "audio_file": "/download_audio/dummy_video.mp3"
-        }
-        Clock.schedule_once(lambda dt: self.add_message(f"Video summary: {dummy_response['text_summary']}", sender="assistant"))
-        video_audio_url = f"{BACKEND_URL}{dummy_response['audio_file']}"
-        self.play_audio(video_audio_url)
+        # Start video capture using OpenCV
+        try:
+            cap = cv2.VideoCapture(0)
+            if not cap.isOpened():
+                Clock.schedule_once(lambda dt: self.add_message("Error: Unable to access the camera.", sender="error"))
+                return
+            
+            # Define video codec and output file
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            temp_dir = "temp_uploads"
+            if not os.path.exists(temp_dir):
+                os.makedirs(temp_dir)
+            video_filename = os.path.join(temp_dir, f"{uuid.uuid4()}_video.mp4")
+            fps = 20.0
+            frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            out = cv2.VideoWriter(video_filename, fourcc, fps, (frame_width, frame_height))
+            
+            Clock.schedule_once(lambda dt: self.add_message("Recording video for 5 seconds...", sender="app"))
+            start_time = time.time()
+            while time.time() - start_time < 5:
+                ret, frame = cap.read()
+                if ret:
+                    out.write(frame)
+                else:
+                    break
+            cap.release()
+            out.release()
+            
+            Clock.schedule_once(lambda dt: self.add_message("Video recorded. Sending video to backend...", sender="app"))
+            
+            # Send the video file to process_video API
+            files = {'file': open(video_filename, 'rb')}
+            url = f"{BACKEND_URL}/process_video/"
+            response = requests.post(url, files=files)
+            if response.status_code == 200:
+                video_data = response.json()
+                text_summary = video_data.get("text_summary", "")
+                video_audio_relative = video_data.get("audio_file", "")
+                full_audio_url = f"{BACKEND_URL}{video_audio_relative}"
+                # Display video summary in UI
+                Clock.schedule_once(lambda dt: self.add_message(f"Video summary: {text_summary}", sender="assistant"))
+                # Play the video TTS audio
+                self.play_audio(full_audio_url)
+                # Display the recorded video in the chat UI using a Video widget
+                Clock.schedule_once(lambda dt: self.add_video(video_filename))
+            else:
+                Clock.schedule_once(lambda dt, err=response.status_code: self.add_message(f"Error from video API: {err}", sender="error"))
+        except Exception as e:
+            Clock.schedule_once(lambda dt, err=e: self.add_message(f"Error during video capture: {err}", sender="error"))
+    
+    def add_video(self, video_filepath):
+        """
+        Adds a Video widget to the chat UI to display the recorded video.
+        The video will remain in the UI until the user closes the app.
+        """
+        from kivy.uix.video import Video
+        video_widget = Video(source=video_filepath, state='play', options={'eos': 'loop'}, size_hint_y=None, height='200dp')
+        self.chat_screen.ids.chat_box.add_widget(video_widget)
+        Clock.schedule_once(lambda dt: self.add_message("Video added to chat UI.", sender="app"))
     
 if __name__ == "__main__":
     MyKivyApp().run()
