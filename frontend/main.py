@@ -71,17 +71,19 @@ class MyKivyApp(App):
                 input=True,
                 frames_per_buffer=porcupine.frame_length
             )
+            
             Clock.schedule_once(lambda dt: self.add_message("Hi there! Just say 'Jarvis' to get started.", sender="app"))
+
             while True:
                 pcm = audio_stream.read(porcupine.frame_length)
                 pcm = np.frombuffer(pcm, dtype=np.int16)
                 result = porcupine.process(pcm)
                 if result >= 0:
-                    Clock.schedule_once(lambda dt: self.add_message("Hello! This is Jarvis. How can I make your day easier", sender="app"))
+                    Clock.schedule_once(lambda dt: self.add_message("Hello! This is Jarvis. How can I make your day easier", sender="Jarvis"))
                     self.record_audio()
                 time.sleep(0.01)
         except Exception as e:
-            Clock.schedule_once(lambda dt, err=e: self.add_message(f"Error in wake word detection: {err}", sender="error"))
+            Clock.schedule_once(lambda dt, err=e: self.add_message(f"Error in calling up 'Jarvis': {err}", sender="error"))
 
     def record_audio(self):
         """
@@ -95,8 +97,8 @@ class MyKivyApp(App):
         pa = pyaudio.PyAudio()
         stream = pa.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
         frames = []
-        Clock.schedule_once(lambda dt: self.add_message("You've got my attention. I'm listening for the next 8 seconds.", sender="app"))
-        record_seconds = 8
+        Clock.schedule_once(lambda dt: self.add_message("You've got my attention. I'm listening for the next 5 seconds.", sender="Jarvis"))
+        record_seconds = 5
         for i in range(0, int(RATE / CHUNK * record_seconds)):
             data = stream.read(CHUNK)
             frames.append(data)
@@ -115,7 +117,8 @@ class MyKivyApp(App):
         wf.writeframes(b''.join(frames))
         wf.close()
         
-        Clock.schedule_once(lambda dt: self.add_message("Recording complete. Sending audio to backend...", sender="app"))
+        #Clock.schedule_once(lambda dt: self.add_message("Recording complete. Sending audio to backend...", sender="app"))
+        #Clock.schedule_once(lambda dt: self.add_message("Hang tight, I'm processing that for you!", sender="app"))
         self.send_audio_to_backend(filename)
     
     def send_audio_to_backend(self, audio_filepath):
@@ -145,17 +148,23 @@ class MyKivyApp(App):
         audio_url = f"{BACKEND_URL}{data3}"
         transcript = data.get("transcript", "")
         
-        Clock.schedule_once(lambda dt: self.add_message(f"Transcript: {transcript}", sender="user"))
-        Clock.schedule_once(lambda dt: self.add_message(f"Response: {data2}", sender="assistant"))
+        Clock.schedule_once(lambda dt: self.add_message(f": {transcript}", sender="user"))
+        Clock.schedule_once(lambda dt: self.add_message("Hang tight, I'm processing that for you!", sender="Jarvis"))
+        #Clock.schedule_once(lambda dt: self.add_message(f"Response: {data2}", sender="assistant"))
         
         if data1.get("Record"):
-            Clock.schedule_once(lambda dt: self.add_message("Record intent detected. Launching video capture...", sender="app"))
+            #Clock.schedule_once(lambda dt: self.add_message("Record intent detected. Launching video capture...", sender="app"))
+            Clock.schedule_once(lambda dt: self.add_message("Got it! You’d like to start recording—camera’s coming on. ", sender="Jarvis"))
             self.capture_video()  # Launch video capture
         else:
-            Clock.schedule_once(lambda dt: self.add_message("Playing response audio...", sender="app"))
+            #Clock.schedule_once(lambda dt: self.add_message("Playing response audio...", sender="app"))
+            Clock.schedule_once(lambda dt: self.add_message("Umm... here's what I know!", sender="Jarvis"))
             self.play_audio(audio_url)
+            Clock.schedule_once(lambda dt: self.add_message(f": {data2}", sender="Jarvis"))
+            #self.play_audio(audio_url)
         
-        Clock.schedule_once(lambda dt: self.add_message("Re-listening for wake word...", sender="app"))
+        #Clock.schedule_once(lambda dt: self.add_message("Re-listening for wake word...", sender="app"))
+        Clock.schedule_once(lambda dt: self.add_message("Just say 'Jarvis' if you need my help again!", sender="app"))
     
     def play_audio(self, audio_url):
         """
@@ -191,7 +200,7 @@ class MyKivyApp(App):
             frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             out = cv2.VideoWriter(video_filename, fourcc, fps, (frame_width, frame_height))
             
-            Clock.schedule_once(lambda dt: self.add_message("Recording video for 5 seconds...", sender="app"))
+            Clock.schedule_once(lambda dt: self.add_message("Recording video for 5 seconds...", sender="Jarvis"))
             start_time = time.time()
             while time.time() - start_time < 5:
                 ret, frame = cap.read()
@@ -202,7 +211,8 @@ class MyKivyApp(App):
             cap.release()
             out.release()
             
-            Clock.schedule_once(lambda dt: self.add_message("Video recorded. Sending video to backend...", sender="app"))
+            #Clock.schedule_once(lambda dt: self.add_message("Video recorded. Sending video to backend...", sender="app"))
+            Clock.schedule_once(lambda dt: self.add_message("Just a moment... I’m processing what’s around you.", sender="Jarvis"))
             
             # Send the video file to process_video API
             files = {'file': open(video_filename, 'rb')}
@@ -214,7 +224,8 @@ class MyKivyApp(App):
                 video_audio_relative = video_data.get("audio_file", "")
                 full_audio_url = f"{BACKEND_URL}{video_audio_relative}"
                 # Display video summary in UI
-                Clock.schedule_once(lambda dt: self.add_message(f"Video summary: {text_summary}", sender="assistant"))
+                #Clock.schedule_once(lambda dt: self.add_message(f"Video summary: {text_summary}", sender="assistant"))
+                Clock.schedule_once(lambda dt: self.add_message(f"Based on what I see, here's my take on what's around you: {text_summary}", sender="Jarvis"))
                 # Play the video TTS audio
                 self.play_audio(full_audio_url)
                 # Display the recorded video in the chat UI using a Video widget
@@ -232,7 +243,7 @@ class MyKivyApp(App):
         from kivy.uix.video import Video
         video_widget = Video(source=video_filepath, state='play', options={'eos': 'loop'}, size_hint_y=None, height='200dp')
         self.chat_screen.ids.chat_box.add_widget(video_widget)
-        Clock.schedule_once(lambda dt: self.add_message("Video added to chat UI.", sender="app"))
+        Clock.schedule_once(lambda dt: self.add_message("Saving your video in our chat", sender="app"))
     
 if __name__ == "__main__":
     MyKivyApp().run()
