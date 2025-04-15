@@ -103,6 +103,9 @@ The app will:
 
 ## Project Overview
 
+### Project Overflow
+![Project Overflow](project_overflow.svg)
+
 ### Problem Statement
 
 Visually impaired users often face challenges navigating and understanding their surroundings due to a heavy reliance on visual cues in traditional interfaces. The lack of real-time, accessible environmental feedback creates significant barriers in everyday life and can lead to reduced independence.
