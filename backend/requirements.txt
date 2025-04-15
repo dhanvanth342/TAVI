@@ -17,9 +17,16 @@ kivy
 kivymd            # Optional if you want Material Design components.
 pvporcupine
 pyaudio
-requests
-python-dotenv
+#requests
+#python-dotenv
 huggingface_hub
 pillow
-pvporcupine
+#pvporcupine
 # Note: Make sure you have the appropriate versions that are compatible with your platform.
+#kivy
+#pvporcupine
+#pyaudio
+#requests
+#python-dotenv
+opencv-python
+numpy
