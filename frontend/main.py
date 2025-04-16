@@ -1,3 +1,4 @@
+# frontend/main.py
 import os
 import uuid
 import threading
@@ -5,61 +6,87 @@ import time
 import json
 import requests
 import wave
-import cv2  # OpenCV for video recording
-
+import cv2  # For video recording
 import numpy as np
+
 from kivy.clock import Clock
-from kivy.app import App
 from kivy.lang import Builder
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.label import Label
-from kivy.uix.video import Video   # To display video in the UI
 from kivy.core.audio import SoundLoader
+from kivy.core.window import Window  # Import Window for fallback width
+from kivymd.app import MDApp
 
 import pyaudio
 import pvporcupine
 
-from config import BACKEND_URL, PORCUPINE_KEY
+from config import BACKEND_URL, PORCUPINE_KEY, AUDIO_FILES_DIR, DEFAULT_AUDIO_MAP
 
-# KV string for a simple chat UI layout
-KV = '''
-<ChatScreen>:
-    orientation: 'vertical'
-    ScrollView:
-        id: scroll_view
-        do_scroll_x: True
-        do_scroll_y: True
-        BoxLayout:
-            id: chat_box
-            orientation: 'vertical'
-            size_hint_y: None
-            height: self.minimum_height
-    Label:
-        id: mic_indicator
-        text: ''
-        size_hint_y: None
-        height: '40dp'
-'''
+# Load the KV layout from chat.kv
+KV = Builder.load_file("chat.kv")
 
-Builder.load_string(KV)
-
-class ChatScreen(BoxLayout):
-    pass
-
-class MyKivyApp(App):
+class MyTaviApp(MDApp):
     def build(self):
-        self.chat_screen = ChatScreen()
+        self.theme_cls.primary_palette = "DeepPurple"  # Uses a violet/blue theme
+        self.theme_cls.primary_hue = "500"
+        # Load the root widget from the KV file and assign it to self.root.
+        self.root = Builder.load_file("chat.kv")
+        return self.root
+
+    def on_start(self):
+        # Now that the root widget is available, assign self.chat_screen.
+        self.chat_screen = self.root
+        # Start the wake word listener thread after the UI is fully built.
         threading.Thread(target=self.wake_word_listener, daemon=True).start()
-        return self.chat_screen
+        # Schedule the welcome message and corresponding audio after a slight delay.
+        welcome_text = ("Welcome to TAVI, a hands-free platform that lets you engage with your surroundings and ask anything, "
+                        "with Jarvis as your intelligent assistant.\nJust say 'Jarvis' to get started.")
+        Clock.schedule_once(lambda dt: self.add_message(welcome_text, sender="system"), 0.5)
+        # Play welcome audio
+        welcome_audio = os.path.join(AUDIO_FILES_DIR, DEFAULT_AUDIO_MAP["welcome"])
+        self.play_audio(welcome_audio)
 
     def add_message(self, message, sender="system"):
-        lbl = Label(text=f"[{sender}] {message}", markup=True, size_hint_y=None, height='30dp')
+        from kivymd.uix.label import MDLabel
+        # Use Window.width as a fallback if self.chat_screen.width is not set
+        chat_width = (getattr(self.chat_screen, 'width', Window.width) or Window.width) * 0.95
+
+        lbl = MDLabel(
+            text=f"{message}",
+            markup=True,
+            size_hint_y=None,
+            halign="left",
+            text_size=(chat_width, None)
+        )
+        lbl.texture_update()
+        lbl.height = lbl.texture_size[1] + 20
         self.chat_screen.ids.chat_box.add_widget(lbl)
         Clock.schedule_once(lambda dt: setattr(self.chat_screen.ids.scroll_view, 'scroll_y', 0))
 
+        # For default messages, play corresponding audio if available.
+        mapping = {
+            "Jarvis_greeting": "jarvis_greeting",    # When Jarvis speaks
+            "app": "get_started",
+            "error": "jerror",
+            "error_b": "berror",
+            "Jarvis": "jarvis",
+            "Jarvis_record": "jarvis_camera",
+            "processing": "jarvis_processing",
+            "Jarvis_response": "jarvis_response",
+            "Jarvis_again": "jarvis_again",
+            "Audio_error": "audio_error",
+            "Camera_error": "camera_error",
+            "Recording_video": "recording_video",
+            "Video_processing": "video_processing",
+            "Video_response": "video_response",
+            "Video_error": "video_error",
+            "Camera_recording_error": "camera_recording_error"
+        }
+        if sender in mapping:
+            audio_file = os.path.join(AUDIO_FILES_DIR, DEFAULT_AUDIO_MAP[mapping[sender]])
+            self.play_audio(audio_file)
+
     def wake_word_listener(self):
         """
-        Listens for the wake word "Jarvis" using Porcupine and starts recording audio when detected.   
+        Listens for the wake word "Jarvis" using Porcupine and starts recording audio when detected.
         """
         try:
             porcupine = pvporcupine.create(access_key=PORCUPINE_KEY, keywords=["jarvis"])
@@ -71,19 +98,18 @@ class MyKivyApp(App):
                 input=True,
                 frames_per_buffer=porcupine.frame_length
             )
-            
-            Clock.schedule_once(lambda dt: self.add_message("Hi there! Just say 'Jarvis' to get started.", sender="app"))
-
+            Clock.schedule_once(lambda dt: self.add_message("TAVI: Just say 'Jarvis' to get started.", sender="app"))
             while True:
                 pcm = audio_stream.read(porcupine.frame_length)
                 pcm = np.frombuffer(pcm, dtype=np.int16)
                 result = porcupine.process(pcm)
                 if result >= 0:
-                    Clock.schedule_once(lambda dt: self.add_message("Hello! This is Jarvis. How can I make your day easier", sender="Jarvis"))
+                    Clock.schedule_once(lambda dt: self.add_message("Jarvis: Hello! This is Jarvis. How can I make your day easier?", sender="Jarvis_greeting"))
+                    time.sleep(3)  # Delay to ensure the greeting audio is finished.
                     self.record_audio()
                 time.sleep(0.01)
         except Exception as e:
-            Clock.schedule_once(lambda dt, err=e: self.add_message(f"Error in calling up 'Jarvis': {err}", sender="error"))
+            Clock.schedule_once(lambda dt, err=e: self.add_message(f"App: Error in calling up 'Jarvis': {err}", sender="error"))
 
     def record_audio(self):
         """
@@ -97,7 +123,7 @@ class MyKivyApp(App):
         pa = pyaudio.PyAudio()
         stream = pa.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
         frames = []
-        Clock.schedule_once(lambda dt: self.add_message("You've got my attention. I'm listening for the next 5 seconds.", sender="Jarvis"))
+        Clock.schedule_once(lambda dt: self.add_message("Jarvis: You've got my attention. I'm listening to you now.", sender="Jarvis"))
         record_seconds = 5
         for i in range(0, int(RATE / CHUNK * record_seconds)):
             data = stream.read(CHUNK)
@@ -117,8 +143,6 @@ class MyKivyApp(App):
         wf.writeframes(b''.join(frames))
         wf.close()
         
-        #Clock.schedule_once(lambda dt: self.add_message("Recording complete. Sending audio to backend...", sender="app"))
-        #Clock.schedule_once(lambda dt: self.add_message("Hang tight, I'm processing that for you!", sender="app"))
         self.send_audio_to_backend(filename)
     
     def send_audio_to_backend(self, audio_filepath):
@@ -133,9 +157,9 @@ class MyKivyApp(App):
                 data = response.json()
                 self.process_audio_response(data)
             else:
-                Clock.schedule_once(lambda dt, err=response.status_code: self.add_message(f"Backend error: {err}", sender="error"))
+                Clock.schedule_once(lambda dt, err=response.status_code: self.add_message(f"Jarvis: Sorry, I’m having trouble processing your request at the moment. {err}", sender="error_b"))
         except Exception as e:
-            Clock.schedule_once(lambda dt, err=e: self.add_message(f"Error sending audio: {err}", sender="error"))
+            Clock.schedule_once(lambda dt, err=e: self.add_message(f"Jarvis: Sorry, I’m having trouble processing your request at the moment: {err}", sender="error_b"))
     
     def process_audio_response(self, data):
         """
@@ -143,38 +167,33 @@ class MyKivyApp(App):
         """
         data1 = data.get("data1", {})
         data2 = data.get("data2", "")
-        data3 = data.get("data3", "")  # Relative URL (e.g., "/download_audio/filename.mp3")
-        
+        data3 = data.get("data3", "")
         audio_url = f"{BACKEND_URL}{data3}"
         transcript = data.get("transcript", "")
         
-        Clock.schedule_once(lambda dt: self.add_message(f": {transcript}", sender="user"))
-        Clock.schedule_once(lambda dt: self.add_message("Hang tight, I'm processing that for you!", sender="Jarvis"))
-        #Clock.schedule_once(lambda dt: self.add_message(f"Response: {data2}", sender="assistant"))
+        Clock.schedule_once(lambda dt: self.add_message(f"User: {transcript}", sender="user"))
+        Clock.schedule_once(lambda dt: self.add_message("Jarvis: Hang tight, I'm processing that for you!", sender="processing"))
         
         if data1.get("Record"):
-            #Clock.schedule_once(lambda dt: self.add_message("Record intent detected. Launching video capture...", sender="app"))
-            Clock.schedule_once(lambda dt: self.add_message("Got it! You’d like to start recording—camera’s coming on. ", sender="Jarvis"))
-            self.capture_video()  # Launch video capture
+            Clock.schedule_once(lambda dt: self.add_message("Jarvis: Got it! You’d like to start recording—camera’s coming on.", sender="Jarvis_record"))
+            self.capture_video()
         else:
-            #Clock.schedule_once(lambda dt: self.add_message("Playing response audio...", sender="app"))
-            Clock.schedule_once(lambda dt: self.add_message("Umm... here's what I know!", sender="Jarvis"))
+            Clock.schedule_once(lambda dt: self.add_message("Jarvis: Umm... here's what I know!", sender="Jarvis_response"))
             self.play_audio(audio_url)
-            Clock.schedule_once(lambda dt: self.add_message(f": {data2}", sender="Jarvis"))
-            #self.play_audio(audio_url)
+            Clock.schedule_once(lambda dt: self.add_message(f"Jarvis: {data2}", sender="Jarvis_responding"))
         
-        #Clock.schedule_once(lambda dt: self.add_message("Re-listening for wake word...", sender="app"))
-        Clock.schedule_once(lambda dt: self.add_message("Just say 'Jarvis' if you need my help again!", sender="app"))
+        Clock.schedule_once(lambda dt: self.add_message("TAVI: Just say 'Jarvis' if you need my help again!", sender="Jarvis_again"))
     
-    def play_audio(self, audio_url):
+    def play_audio(self, audio_path):
         """
         Loads and plays the audio using Kivy's SoundLoader.
+        For static audio files, audio_path can be an absolute file path.
         """
-        sound = SoundLoader.load(audio_url)
+        sound = SoundLoader.load(audio_path)
         if sound:
             sound.play()
         else:
-            Clock.schedule_once(lambda dt: self.add_message("Failed to load audio.", sender="error"))
+            Clock.schedule_once(lambda dt: self.add_message("Jarvis: Failed to play the audio.", sender="Audio_error"))
     
     def capture_video(self):
         """
@@ -182,14 +201,12 @@ class MyKivyApp(App):
         and updates the chat UI with the video summary and plays the TTS audio.
         The recorded video is displayed in the UI using a Kivy Video widget.
         """
-        # Start video capture using OpenCV
         try:
             cap = cv2.VideoCapture(0)
             if not cap.isOpened():
-                Clock.schedule_once(lambda dt: self.add_message("Error: Unable to access the camera.", sender="error"))
+                Clock.schedule_once(lambda dt: self.add_message("Jarvis: Failed to access the camera.", sender="Camera_error"))
                 return
             
-            # Define video codec and output file
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             temp_dir = "temp_uploads"
             if not os.path.exists(temp_dir):
@@ -200,7 +217,7 @@ class MyKivyApp(App):
             frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             out = cv2.VideoWriter(video_filename, fourcc, fps, (frame_width, frame_height))
             
-            Clock.schedule_once(lambda dt: self.add_message("Recording video for 5 seconds...", sender="Jarvis"))
+            Clock.schedule_once(lambda dt: self.add_message("Recording video (preview active)...", sender="Recording_video"))
             start_time = time.time()
             while time.time() - start_time < 5:
                 ret, frame = cap.read()
@@ -211,10 +228,8 @@ class MyKivyApp(App):
             cap.release()
             out.release()
             
-            #Clock.schedule_once(lambda dt: self.add_message("Video recorded. Sending video to backend...", sender="app"))
-            Clock.schedule_once(lambda dt: self.add_message("Just a moment... I’m processing what’s around you.", sender="Jarvis"))
+            Clock.schedule_once(lambda dt: self.add_message("Jarvis: Just a moment... I’m processing what’s around you.", sender="Video_processing"))
             
-            # Send the video file to process_video API
             files = {'file': open(video_filename, 'rb')}
             url = f"{BACKEND_URL}/process_video/"
             response = requests.post(url, files=files)
@@ -223,27 +238,20 @@ class MyKivyApp(App):
                 text_summary = video_data.get("text_summary", "")
                 video_audio_relative = video_data.get("audio_file", "")
                 full_audio_url = f"{BACKEND_URL}{video_audio_relative}"
-                # Display video summary in UI
-                #Clock.schedule_once(lambda dt: self.add_message(f"Video summary: {text_summary}", sender="assistant"))
-                Clock.schedule_once(lambda dt: self.add_message(f"Based on what I see, here's my take on what's around you: {text_summary}", sender="Jarvis"))
-                # Play the video TTS audio
+                Clock.schedule_once(lambda dt: self.add_message(f"Jarvis: Based on what I see, here's my take on what's around you: {text_summary}", sender="Video_response"))
                 self.play_audio(full_audio_url)
-                # Display the recorded video in the chat UI using a Video widget
                 Clock.schedule_once(lambda dt: self.add_video(video_filename))
             else:
-                Clock.schedule_once(lambda dt, err=response.status_code: self.add_message(f"Error from video API: {err}", sender="error"))
+                Clock.schedule_once(lambda dt, err=response.status_code: self.add_message(f"Jarvis: Unable to process the video due to: {err}", sender="Video_error"))
         except Exception as e:
-            Clock.schedule_once(lambda dt, err=e: self.add_message(f"Error during video capture: {err}", sender="error"))
+            Clock.schedule_once(lambda dt, err=e: self.add_message(f"Jarvis: Error during video capture: {err}", sender="Camera_recording_error"))
     
     def add_video(self, video_filepath):
-        """
-        Adds a Video widget to the chat UI to display the recorded video.
-        The video will remain in the UI until the user closes the app.
-        """
+        from kivymd.uix.boxlayout import MDBoxLayout
         from kivy.uix.video import Video
         video_widget = Video(source=video_filepath, state='play', options={'eos': 'loop'}, size_hint_y=None, height='200dp')
-        self.chat_screen.ids.chat_box.add_widget(video_widget)
-        Clock.schedule_once(lambda dt: self.add_message("Saving your video in our chat", sender="app"))
+        self.root.ids.chat_box.add_widget(video_widget)
+        Clock.schedule_once(lambda dt: self.add_message("Jarvis: Saving your video in our chat.", sender="app"))
     
 if __name__ == "__main__":
-    MyKivyApp().run()
+    MyTaviApp().run()
