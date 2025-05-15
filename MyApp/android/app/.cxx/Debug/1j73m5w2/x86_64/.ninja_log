@@ -1,0 +1,8 @@
+# ninja log v5
+3	42	0	E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/x86_64/CMakeFiles/cmake.verify_globs	dc37c83a0860a42b
+1	6489	7688667773992651	CMakeFiles/appmodules.dir/E_/TAVI/MyApp/android/app/build/generated/autolinking/src/main/jni/autolinking.cpp.o	1459c3214b51f905
+7	7066	7688667779557278	CMakeFiles/appmodules.dir/OnLoad.cpp.o	78764e9158c203d9
+7067	7296	7688667782111918	E:/TAVI/MyApp/android/app/build/intermediates/cxx/Debug/1j73m5w2/obj/x86_64/libappmodules.so	22a84e01c9955521
+3	46	0	E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/x86_64/CMakeFiles/cmake.verify_globs	dc37c83a0860a42b
+3	44	0	E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/x86_64/CMakeFiles/cmake.verify_globs	dc37c83a0860a42b
+3	28	0	E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/x86_64/CMakeFiles/cmake.verify_globs	dc37c83a0860a42b
