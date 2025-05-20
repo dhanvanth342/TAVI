@@ -1,1 +1,2 @@
+E:\TAVI\MyApp\node_modules\@picovoice\react-native-voice-processor\android\build\generated\source\codegen\jni\CMakeLists.txt
 E:\TAVI\MyApp\node_modules\react-native\ReactAndroid\cmake-utils\default-app-setup\CMakeLists.txt

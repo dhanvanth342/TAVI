@@ -12,6 +12,31 @@ if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
   file(TOUCH_NOCREATE "E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/x86_64/CMakeFiles/cmake.verify_globs")
 endif()
 
+# react_codegen_SRCS at E:/TAVI/MyApp/node_modules/@picovoice/react-native-voice-processor/android/build/generated/source/codegen/jni/CMakeLists.txt:9 (file)
+file(GLOB NEW_GLOB LIST_DIRECTORIES true "E:/TAVI/MyApp/node_modules/@picovoice/react-native-voice-processor/android/build/generated/source/codegen/jni/*.cpp")
+set(OLD_GLOB
+  "E:/TAVI/MyApp/node_modules/@picovoice/react-native-voice-processor/android/build/generated/source/codegen/jni/VoiceProcessor-generated.cpp"
+  )
+if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
+  message("-- GLOB mismatch!")
+  file(TOUCH_NOCREATE "E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/x86_64/CMakeFiles/cmake.verify_globs")
+endif()
+
+# react_codegen_SRCS at E:/TAVI/MyApp/node_modules/@picovoice/react-native-voice-processor/android/build/generated/source/codegen/jni/CMakeLists.txt:9 (file)
+file(GLOB NEW_GLOB LIST_DIRECTORIES true "E:/TAVI/MyApp/node_modules/@picovoice/react-native-voice-processor/android/build/generated/source/codegen/jni/react/renderer/components/VoiceProcessor/*.cpp")
+set(OLD_GLOB
+  "E:/TAVI/MyApp/node_modules/@picovoice/react-native-voice-processor/android/build/generated/source/codegen/jni/react/renderer/components/VoiceProcessor/ComponentDescriptors.cpp"
+  "E:/TAVI/MyApp/node_modules/@picovoice/react-native-voice-processor/android/build/generated/source/codegen/jni/react/renderer/components/VoiceProcessor/EventEmitters.cpp"
+  "E:/TAVI/MyApp/node_modules/@picovoice/react-native-voice-processor/android/build/generated/source/codegen/jni/react/renderer/components/VoiceProcessor/Props.cpp"
+  "E:/TAVI/MyApp/node_modules/@picovoice/react-native-voice-processor/android/build/generated/source/codegen/jni/react/renderer/components/VoiceProcessor/ShadowNodes.cpp"
+  "E:/TAVI/MyApp/node_modules/@picovoice/react-native-voice-processor/android/build/generated/source/codegen/jni/react/renderer/components/VoiceProcessor/States.cpp"
+  "E:/TAVI/MyApp/node_modules/@picovoice/react-native-voice-processor/android/build/generated/source/codegen/jni/react/renderer/components/VoiceProcessor/VoiceProcessorJSI-generated.cpp"
+  )
+if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
+  message("-- GLOB mismatch!")
+  file(TOUCH_NOCREATE "E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/x86_64/CMakeFiles/cmake.verify_globs")
+endif()
+
 # override_cpp_SRC at E:/TAVI/MyApp/node_modules/react-native/ReactAndroid/cmake-utils/ReactNative-application.cmake:42 (file)
 # input_SRC at E:/TAVI/MyApp/node_modules/react-native/ReactAndroid/cmake-utils/ReactNative-application.cmake:47 (file)
 file(GLOB NEW_GLOB LIST_DIRECTORIES true "E:/TAVI/MyApp/node_modules/react-native/ReactAndroid/cmake-utils/default-app-setup/*.cpp")

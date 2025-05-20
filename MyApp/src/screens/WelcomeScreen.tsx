@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, SafeAreaView, StatusBar } from 'react-native';
+import { View, StyleSheet, SafeAreaView, StatusBar, TouchableOpacity, Text } from 'react-native';
 import AudioManager from '../utils/AudioManager';
 import GreetingText from '../features/GreetingPlayer';
-import GreetingInstruction from '../features/GreetingInstruction';
-import FooterNote from '../features/FooterNote';
+import AudioRecorder from '../components/AudioRecorder';
+import { PORCUPINE_ACCESS_KEY } from '@env';
 
 const greetings = [
   { text: 'Welcome to Tavi', key: 'welcome' as const },
@@ -13,9 +13,11 @@ const greetings = [
 
 const WelcomeScreen = () => {
   const [currentText, setCurrentText] = useState(greetings[0].text);
+  const [isMicActive, setIsMicActive] = useState(false);
+  const [debugInfo, setDebugInfo] = useState('');
 
   useEffect(() => {
-    AudioManager.preloadAll(); // preload all audio assets
+    AudioManager.preloadAll();
 
     const timeout = setTimeout(() => {
       let currentIndex = 0;
@@ -33,18 +35,73 @@ const WelcomeScreen = () => {
       };
 
       playNext();
-    }, 500); // wait for UI to settle
+    }, 500);
+
+    // Check access key
+    console.log('Access Key length:', PORCUPINE_ACCESS_KEY?.length);
+    if (!PORCUPINE_ACCESS_KEY || PORCUPINE_ACCESS_KEY.length < 10) {
+      console.error('Invalid Access Key!');
+      setDebugInfo('Error: Invalid Access Key');
+    } else {
+      console.log('Access Key looks valid');
+      setDebugInfo('Access Key: Valid');
+    }
 
     return () => clearTimeout(timeout);
   }, []);
+
+  const handleRecordingComplete = (uri: string) => {
+    console.log('Recording saved at:', uri);
+  };
+
+  const handleMicStatus = (status: boolean) => {
+    setIsMicActive(status);
+    console.log('Microphone status:', status ? 'Active' : 'Inactive');
+  };
+
+  const testMicrophone = async () => {
+    // Implementation of testMicrophone
+  };
+
+  const checkPorcupineStatus = async (): Promise<boolean> => {
+    // Implementation of checkPorcupineStatus
+    return true; // or false based on your logic
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       <View style={styles.inner}>
         <GreetingText text={currentText} />
-       {/*  <GreetingInstruction />
-        <FooterNote />*/}
+        <View style={styles.micStatus}>
+          <Text style={styles.micStatusText}>
+            {isMicActive ? '🎤 Listening for "Jarvis"...' : '🎤 Microphone Inactive'}
+          </Text>
+          <Text style={styles.debugText}>
+            {debugInfo}
+          </Text>
+        </View>
+        <AudioRecorder 
+          porcupineAccessKey={PORCUPINE_ACCESS_KEY}
+          onRecordingComplete={handleRecordingComplete}
+          onMicStatusChange={handleMicStatus}
+          onTestMicrophone={testMicrophone}
+          onCheckPorcupineStatus={checkPorcupineStatus}
+          style={styles.recorder}
+        />
+        <TouchableOpacity 
+          style={styles.testButton}
+          onPress={async () => {
+            console.log('Running diagnostic tests...');
+            if (testMicrophone && checkPorcupineStatus) {
+              await testMicrophone();
+              const isListening = await checkPorcupineStatus();
+              setDebugInfo(`Mic: Working, Porcupine: ${isListening ? 'Listening' : 'Not Listening'}`);
+            }
+          }}
+        >
+          <Text style={styles.testButtonText}>Run Diagnostic Tests</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -62,6 +119,33 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     paddingHorizontal: 20,
     backgroundColor: '#ADC7FF',
+  },
+  recorder: {
+    marginTop: 20,
+  },
+  micStatus: {
+    marginVertical: 10,
+    padding: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 8,
+  },
+  micStatusText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  testButton: {
+    marginTop: 20,
+    padding: 15,
+    backgroundColor: '#4A90E2',
+    borderRadius: 8,
+  },
+  testButtonText: {
+    color: 'white',
+    fontSize: 16,
   },
 });
 

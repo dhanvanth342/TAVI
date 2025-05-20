@@ -1,5 +1,6 @@
 {
   "buildFiles": [
+    "E:\\TAVI\\MyApp\\node_modules\\@picovoice\\react-native-voice-processor\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
     "E:\\TAVI\\MyApp\\node_modules\\react-native\\ReactAndroid\\cmake-utils\\default-app-setup\\CMakeLists.txt"
   ],
   "cleanCommandsComponents": [
@@ -17,6 +18,11 @@
     "{LIST_OF_TARGETS_TO_BUILD}"
   ],
   "libraries": {
+    "react_codegen_VoiceProcessor::@9b71bc92394c0498ddf6": {
+      "artifactName": "react_codegen_VoiceProcessor",
+      "abi": "armeabi-v7a",
+      "runtimeFiles": []
+    },
     "appmodules::@6890427a1f51a3e7e1df": {
       "artifactName": "appmodules",
       "abi": "armeabi-v7a",

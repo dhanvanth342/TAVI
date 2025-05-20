@@ -1,3 +1,6 @@
 E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/x86/CMakeFiles/appmodules.dir
 E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/x86/CMakeFiles/edit_cache.dir
 E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/x86/CMakeFiles/rebuild_cache.dir
+E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/x86/VoiceProcessor_autolinked_build/CMakeFiles/react_codegen_VoiceProcessor.dir
+E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/x86/VoiceProcessor_autolinked_build/CMakeFiles/edit_cache.dir
+E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/x86/VoiceProcessor_autolinked_build/CMakeFiles/rebuild_cache.dir

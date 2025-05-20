@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "VoiceProcessor_autolinked_build",
+		"source" : "E:/TAVI/MyApp/node_modules/@picovoice/react-native-voice-processor/android/build/generated/source/codegen/jni"
+	}
+}

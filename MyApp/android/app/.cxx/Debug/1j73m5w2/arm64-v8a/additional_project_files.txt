@@ -1,0 +1,7 @@
+E:\TAVI\MyApp\android\app\.cxx\Debug\1j73m5w2\arm64-v8a\VoiceProcessor_autolinked_build\CMakeFiles\react_codegen_VoiceProcessor.dir\VoiceProcessor-generated.cpp.o
+E:\TAVI\MyApp\android\app\.cxx\Debug\1j73m5w2\arm64-v8a\VoiceProcessor_autolinked_build\CMakeFiles\react_codegen_VoiceProcessor.dir\react\renderer\components\VoiceProcessor\ComponentDescriptors.cpp.o
+E:\TAVI\MyApp\android\app\.cxx\Debug\1j73m5w2\arm64-v8a\VoiceProcessor_autolinked_build\CMakeFiles\react_codegen_VoiceProcessor.dir\react\renderer\components\VoiceProcessor\EventEmitters.cpp.o
+E:\TAVI\MyApp\android\app\.cxx\Debug\1j73m5w2\arm64-v8a\VoiceProcessor_autolinked_build\CMakeFiles\react_codegen_VoiceProcessor.dir\react\renderer\components\VoiceProcessor\Props.cpp.o
+E:\TAVI\MyApp\android\app\.cxx\Debug\1j73m5w2\arm64-v8a\VoiceProcessor_autolinked_build\CMakeFiles\react_codegen_VoiceProcessor.dir\react\renderer\components\VoiceProcessor\ShadowNodes.cpp.o
+E:\TAVI\MyApp\android\app\.cxx\Debug\1j73m5w2\arm64-v8a\VoiceProcessor_autolinked_build\CMakeFiles\react_codegen_VoiceProcessor.dir\react\renderer\components\VoiceProcessor\States.cpp.o
+E:\TAVI\MyApp\android\app\.cxx\Debug\1j73m5w2\arm64-v8a\VoiceProcessor_autolinked_build\CMakeFiles\react_codegen_VoiceProcessor.dir\react\renderer\components\VoiceProcessor\VoiceProcessorJSI-generated.cpp.o
