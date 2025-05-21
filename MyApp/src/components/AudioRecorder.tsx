@@ -5,9 +5,11 @@ import {
   StyleSheet,
   Platform,
   PermissionsAndroid,
+  ScrollView
 } from 'react-native';
 import AudioRecorderPlayer from 'react-native-audio-recorder-player';
 import { PorcupineManager, BuiltInKeywords } from '@picovoice/porcupine-react-native';
+import SoundPlayer from 'react-native-sound-player';
 
 // Update the BACKEND_URL to handle Android emulator
 const BACKEND_URL = Platform.select({
@@ -25,6 +27,23 @@ interface AudioRecorderProps {
   porcupineAccessKey: string;
 }
 
+interface AudioResponse {
+  data1: {
+    Record: boolean;
+    General: boolean;
+    Fallback: boolean;
+    Tavi: boolean;
+  };
+  data2: string;
+  data3: string;
+  transcript: string;
+}
+
+interface Message {
+  text: string;
+  sender: 'user' | 'Jarvis' | 'assistant';
+}
+
 const AudioRecorder: React.FC<AudioRecorderProps> = ({ 
   onRecordingComplete, 
   onMicStatusChange,
@@ -37,6 +56,8 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioRecorderPlayer] = useState(new AudioRecorderPlayer());
   const [porcupineManager, setPorcupineManager] = useState<PorcupineManager | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const requestRecordAudioPermission = async () => {
     if (Platform.OS === 'android') {
@@ -156,9 +177,45 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
     }
   };
 
+  const processAudioResponse = async (data: AudioResponse) => {
+    try {
+      setIsProcessing(true);
+      
+      // Add user's transcript message
+      setMessages(prev => [...prev, { text: data.transcript, sender: 'user' }]);
+      
+      // Add processing message
+      setMessages(prev => [...prev, { text: "Hang tight, I'm processing that for you!", sender: 'Jarvis' }]);
+
+      if (data.data1.Record) {
+        // Handle Record intent
+        setMessages(prev => [...prev, { text: "Got it! You'd like to start recording—camera's coming on.", sender: 'Jarvis' }]);
+        // TODO: Add your video capture logic here
+      } else {
+        // Handle normal response
+        setMessages(prev => [...prev, { text: "Umm... here's what I know!", sender: 'Jarvis' }]);
+        
+        // Play the audio response
+        const audioUrl = `${BACKEND_URL}${data.data3}`;
+        try {
+          await SoundPlayer.playUrl(audioUrl);
+        } catch (error) {
+          console.error('Error playing audio:', error);
+        }
+
+        // Add the response text
+        setMessages(prev => [...prev, { text: data.data2, sender: 'Jarvis' }]);
+      }
+    } catch (error) {
+      console.error('Error processing audio response:', error);
+      setMessages(prev => [...prev, { text: "Sorry, I encountered an error processing your request.", sender: 'Jarvis' }]);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const sendAudioToBackend = async (audioFilePath: string) => {
     try {
-      // Create proper file URI for Android
       const fileUri = Platform.OS === 'android' 
         ? `file://${audioFilePath}`
         : audioFilePath;
@@ -187,6 +244,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
       if (response.ok) {
         const data = await response.json();
         console.log('Audio processed successfully:', data);
+        await processAudioResponse(data);
         return data;
       } else {
         console.error('Failed to process audio:', response.status);
@@ -251,19 +309,60 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
 
   return (
     <View style={[styles.container, style]}>
-      <Text style={styles.timer}>{formatTime(recordingTime)}</Text>
-      <Text style={styles.status}>
-        {isRecording ? 'Recording...' : 'Say "Jarvis" to start recording'}
-      </Text>
+      <ScrollView style={styles.messagesContainer}>
+        {messages.map((message, index) => (
+          <View 
+            key={index} 
+            style={[
+              styles.messageBubble,
+              message.sender === 'user' ? styles.userMessage : styles.jarvisMessage
+            ]}
+          >
+            <Text style={styles.messageText}>{message.text}</Text>
+          </View>
+        ))}
+      </ScrollView>
+      
+      <View style={styles.recorderContainer}>
+        <Text style={styles.timer}>{formatTime(recordingTime)}</Text>
+        <Text style={styles.status}>
+          {isRecording ? 'Recording...' : 'Say "Jarvis" to start recording'}
+        </Text>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    padding: 20,
+  },
+  messagesContainer: {
+    flex: 1,
+    marginBottom: 20,
+  },
+  recorderContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+  },
+  messageBubble: {
+    padding: 10,
+    borderRadius: 10,
+    marginVertical: 5,
+    maxWidth: '80%',
+  },
+  userMessage: {
+    backgroundColor: '#e3f2fd',
+    alignSelf: 'flex-end',
+  },
+  jarvisMessage: {
+    backgroundColor: '#f5f5f5',
+    alignSelf: 'flex-start',
+  },
+  messageText: {
+    fontSize: 16,
+    color: '#333',
   },
   timer: {
     fontSize: 24,
