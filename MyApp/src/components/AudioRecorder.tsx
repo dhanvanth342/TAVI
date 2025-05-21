@@ -9,6 +9,13 @@ import {
 import AudioRecorderPlayer from 'react-native-audio-recorder-player';
 import { PorcupineManager, BuiltInKeywords } from '@picovoice/porcupine-react-native';
 
+// Update the BACKEND_URL to handle Android emulator
+const BACKEND_URL = Platform.select({
+  android: 'http://10.0.2.2:8000', // Android emulator localhost
+  ios: 'http://127.0.0.1:8000',    // iOS simulator localhost
+  default: 'http://127.0.0.1:8000'
+});
+
 interface AudioRecorderProps {
   onRecordingComplete?: (uri: string) => void;
   onMicStatusChange?: (status: boolean) => void;
@@ -149,6 +156,46 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
     }
   };
 
+  const sendAudioToBackend = async (audioFilePath: string) => {
+    try {
+      // Create proper file URI for Android
+      const fileUri = Platform.OS === 'android' 
+        ? `file://${audioFilePath}`
+        : audioFilePath;
+
+      const formData = new FormData();
+      formData.append('file', {
+        uri: fileUri,
+        type: 'audio/mp4',
+        name: 'recording.m4a'
+      } as any);
+
+      console.log('Sending audio to backend:', {
+        url: `${BACKEND_URL}/process_audio/`,
+        fileUri
+      });
+
+      const response = await fetch(`${BACKEND_URL}/process_audio/`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Audio processed successfully:', data);
+        return data;
+      } else {
+        console.error('Failed to process audio:', response.status);
+      }
+    } catch (error) {
+      console.error('Error sending audio to backend:', error);
+    }
+  };
+
   const stopRecording = async () => {
     try {
       const result = await audioRecorderPlayer.stopRecorder();
@@ -156,6 +203,10 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
       setIsRecording(false);
       setRecordingTime(0);
       console.log('Recording stopped:', result);
+      
+      // Send the audio to backend
+      await sendAudioToBackend(result);
+      
       if (onRecordingComplete) {
         onRecordingComplete(result);
       }

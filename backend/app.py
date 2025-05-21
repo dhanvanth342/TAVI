@@ -23,6 +23,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Initialize the processors (video and audio)
@@ -122,3 +123,7 @@ async def download_audio(audio_filename: str):
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Audio file not found")
     return FileResponse(path=file_path, filename=audio_filename, media_type='audio/mpeg')
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
