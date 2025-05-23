@@ -15,6 +15,7 @@ const WelcomeScreen = () => {
   const [currentText, setCurrentText] = useState(greetings[0].text);
   const [isMicActive, setIsMicActive] = useState(false);
   const [debugInfo, setDebugInfo] = useState('');
+  const [showRecorder, setShowRecorder] = useState(false); // 🚩 Add state to control AudioRecorder visibility
 
   useEffect(() => {
     AudioManager.preloadAll();
@@ -28,16 +29,20 @@ const WelcomeScreen = () => {
           setCurrentText(text);
           currentIndex++;
 
+          // Play greeting sound, then play next after a short pause
           AudioManager.play(key, () => {
             setTimeout(playNext, 500);
           });
+        } else {
+          // 🚩 All greetings done! Show AudioRecorder and start wake word listening
+          setShowRecorder(true);
         }
       };
 
       playNext();
     }, 500);
 
-    // Check access key
+    // Check access key for debugging/info
     console.log('Access Key length:', PORCUPINE_ACCESS_KEY?.length);
     if (!PORCUPINE_ACCESS_KEY || PORCUPINE_ACCESS_KEY.length < 10) {
       console.error('Invalid Access Key!');
@@ -81,14 +86,17 @@ const WelcomeScreen = () => {
             {debugInfo}
           </Text>
         </View>
-        <AudioRecorder 
-          porcupineAccessKey={PORCUPINE_ACCESS_KEY}
-          onRecordingComplete={handleRecordingComplete}
-          onMicStatusChange={handleMicStatus}
-          onTestMicrophone={testMicrophone}
-          onCheckPorcupineStatus={checkPorcupineStatus}
-          style={styles.recorder}
-        />
+        {/* 🚩 Only show AudioRecorder after greetings finish */}
+        {showRecorder && (
+          <AudioRecorder 
+            porcupineAccessKey={PORCUPINE_ACCESS_KEY}
+            onRecordingComplete={handleRecordingComplete}
+            onMicStatusChange={handleMicStatus}
+            onTestMicrophone={testMicrophone}
+            onCheckPorcupineStatus={checkPorcupineStatus}
+            style={styles.recorder}
+          />
+        )}
         <TouchableOpacity 
           style={styles.testButton}
           onPress={async () => {
