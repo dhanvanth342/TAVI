@@ -4,3 +4,6 @@ E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/armeabi-v7a/CMakeFiles/rebuild_cac
 E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/armeabi-v7a/VoiceProcessor_autolinked_build/CMakeFiles/react_codegen_VoiceProcessor.dir
 E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/armeabi-v7a/VoiceProcessor_autolinked_build/CMakeFiles/edit_cache.dir
 E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/armeabi-v7a/VoiceProcessor_autolinked_build/CMakeFiles/rebuild_cache.dir
+E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/armeabi-v7a/rnasyncstorage_autolinked_build/CMakeFiles/react_codegen_rnasyncstorage.dir
+E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/armeabi-v7a/rnasyncstorage_autolinked_build/CMakeFiles/edit_cache.dir
+E:/TAVI/MyApp/android/app/.cxx/Debug/1j73m5w2/armeabi-v7a/rnasyncstorage_autolinked_build/CMakeFiles/rebuild_cache.dir

@@ -1,6 +1,7 @@
 {
   "buildFiles": [
     "E:\\TAVI\\MyApp\\node_modules\\@picovoice\\react-native-voice-processor\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "E:\\TAVI\\MyApp\\node_modules\\@react-native-async-storage\\async-storage\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
     "E:\\TAVI\\MyApp\\node_modules\\react-native\\ReactAndroid\\cmake-utils\\default-app-setup\\CMakeLists.txt"
   ],
   "cleanCommandsComponents": [
@@ -33,6 +34,11 @@
       "toolchain": "toolchain",
       "abi": "armeabi-v7a",
       "artifactName": "react_codegen_VoiceProcessor"
+    },
+    "react_codegen_rnasyncstorage::@1596841e19ec5b9eeffe": {
+      "toolchain": "toolchain",
+      "abi": "armeabi-v7a",
+      "artifactName": "react_codegen_rnasyncstorage"
     }
   },
   "toolchains": {

@@ -10,6 +10,8 @@ import {
 import AudioRecorderPlayer from 'react-native-audio-recorder-player';
 import { PorcupineManager, BuiltInKeywords } from '@picovoice/porcupine-react-native';
 import SoundPlayer from 'react-native-sound-player';
+import VideoRecorder from './VideoRecorder';
+import Video from 'react-native-video';
 
 // Update the BACKEND_URL to handle Android emulator
 const BACKEND_URL = Platform.select({
@@ -44,13 +46,13 @@ interface Message {
   sender: 'user' | 'Jarvis' | 'assistant';
 }
 
-const AudioRecorder: React.FC<AudioRecorderProps> = ({ 
-  onRecordingComplete, 
+const AudioRecorder: React.FC<AudioRecorderProps> = ({
+  onRecordingComplete,
   onMicStatusChange,
   onTestMicrophone,
   onCheckPorcupineStatus,
   style,
-  porcupineAccessKey 
+  porcupineAccessKey
 }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -58,6 +60,10 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const [porcupineManager, setPorcupineManager] = useState<PorcupineManager | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // For video capture
+  const [showVideoRecorder, setShowVideoRecorder] = useState(false);
+  const [lastVideoPath, setLastVideoPath] = useState<string | null>(null);
 
   const requestRecordAudioPermission = async () => {
     if (Platform.OS === 'android') {
@@ -101,7 +107,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
     try {
       console.log('Initializing Porcupine...');
       const keywords: BuiltInKeywords[] = [BuiltInKeywords.JARVIS];
-      
+
       const manager = await PorcupineManager.fromBuiltInKeywords(
         porcupineAccessKey,
         keywords,
@@ -117,7 +123,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
           onMicStatusChange?.(false);
         }
       );
-      
+
       console.log('Porcupine initialized successfully');
       setPorcupineManager(manager);
       await manager.start();
@@ -180,21 +186,20 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const processAudioResponse = async (data: AudioResponse) => {
     try {
       setIsProcessing(true);
-      
+
       // Add user's transcript message
       setMessages(prev => [...prev, { text: data.transcript, sender: 'user' }]);
-      
+
       // Add processing message
       setMessages(prev => [...prev, { text: "Hang tight, I'm processing that for you!", sender: 'Jarvis' }]);
 
       if (data.data1.Record) {
         // Handle Record intent
         setMessages(prev => [...prev, { text: "Got it! You'd like to start recording—camera's coming on.", sender: 'Jarvis' }]);
-        // TODO: Add your video capture logic here
+        setShowVideoRecorder(true);
       } else {
         // Handle normal response
         setMessages(prev => [...prev, { text: "Umm... here's what I know!", sender: 'Jarvis' }]);
-        
         // Play the audio response
         const audioUrl = `${BACKEND_URL}${data.data3}`;
         try {
@@ -202,7 +207,6 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
         } catch (error) {
           console.error('Error playing audio:', error);
         }
-
         // Add the response text
         setMessages(prev => [...prev, { text: data.data2, sender: 'Jarvis' }]);
       }
@@ -216,7 +220,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
 
   const sendAudioToBackend = async (audioFilePath: string) => {
     try {
-      const fileUri = Platform.OS === 'android' 
+      const fileUri = Platform.OS === 'android'
         ? `file://${audioFilePath}`
         : audioFilePath;
 
@@ -261,15 +265,104 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
       setIsRecording(false);
       setRecordingTime(0);
       console.log('Recording stopped:', result);
-      
+
       // Send the audio to backend
       await sendAudioToBackend(result);
-      
+
       if (onRecordingComplete) {
         onRecordingComplete(result);
       }
     } catch (error) {
       console.error('Failed to stop recording:', error);
+    }
+  };
+
+  // VIDEO HANDLING - Updated to match Python code behavior
+  const handleVideoRecorded = async (videoFile: string) => {
+    console.log('Received video file path:', videoFile);
+    
+    setLastVideoPath(videoFile);
+    setMessages(prev => [...prev, { text: "Recording video for 5 seconds...", sender: 'Jarvis' }]);
+    setShowVideoRecorder(false);
+
+    // Send video to backend - matching Python implementation
+    try {
+      // Processing message (like Python code)
+      setMessages(prev => [...prev, { text: "Just a moment... I'm processing what's around you.", sender: 'Jarvis' }]);
+      
+      // Ensure proper file URI format
+      let fileUri = videoFile;
+      if (Platform.OS === 'android' && !videoFile.startsWith('file://')) {
+        fileUri = `file://${videoFile}`;
+      }
+      
+      console.log('Formatted file URI for upload:', fileUri);
+
+      const formData = new FormData();
+      
+      // Generate filename similar to Python: f"{uuid.uuid4()}_video.mp4"
+      const timestamp = Date.now();
+      const randomId = Math.random().toString(36).substring(2, 15);
+      const fileName = `${randomId}_${timestamp}_video.mp4`;
+      
+      formData.append('file', {
+        uri: fileUri,
+        type: 'video/mp4', // Force MP4 type
+        name: fileName,
+      } as any);
+
+      console.log('Sending video to backend:', {
+        url: `${BACKEND_URL}/process_video/`,
+        fileUri,
+        fileName
+      });
+
+      // Send to backend (matching Python requests.post)
+      const response = await fetch(`${BACKEND_URL}/process_video/`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+
+      console.log('Response status:', response.status);
+
+      if (response.status === 200) { // Matching Python: if response.status_code == 200
+        const videoData = await response.json();
+        console.log('Video processed successfully:', videoData);
+        
+        const textSummary = videoData.text_summary || '';
+        const videoAudioRelative = videoData.audio_file || '';
+        const fullAudioUrl = `${BACKEND_URL}${videoAudioRelative}`;
+
+        // Display video summary (matching Python behavior)
+        setMessages(prev => [
+          ...prev,
+          { text: `Based on what I see, here's my take on what's around you: ${textSummary}`, sender: 'Jarvis' }
+        ]);
+        
+        // Play TTS audio (matching Python self.play_audio(full_audio_url))
+        try {
+          await SoundPlayer.playUrl(fullAudioUrl);
+          console.log('Playing video summary audio:', fullAudioUrl);
+        } catch (e) {
+          console.error('Could not play video summary audio:', e);
+        }
+        
+        // Note: Video display is already handled by lastVideoPath state
+        setMessages(prev => [...prev, { text: "Saving your video in our chat", sender: 'assistant' }]);
+        
+      } else {
+        console.error('Backend error:', response.status);
+        setMessages(prev => [...prev, { text: `Error from video API: ${response.status}`, sender: 'Jarvis' }]);
+      }
+    } catch (err) {
+      console.error('Video capture error:', err);
+      setMessages(prev => [...prev, { 
+        text: "Error during video capture. Please try again.", 
+        sender: 'Jarvis' 
+      }]);
     }
   };
 
@@ -311,8 +404,8 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
     <View style={[styles.container, style]}>
       <ScrollView style={styles.messagesContainer}>
         {messages.map((message, index) => (
-          <View 
-            key={index} 
+          <View
+            key={index}
             style={[
               styles.messageBubble,
               message.sender === 'user' ? styles.userMessage : styles.jarvisMessage
@@ -321,14 +414,36 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
             <Text style={styles.messageText}>{message.text}</Text>
           </View>
         ))}
+
+        {/* Video preview */}
+        {lastVideoPath && (
+          <View style={{ marginVertical: 10, alignItems: 'center' }}>
+            <Text style={{ marginBottom: 4 }}>Your Recorded Video:</Text>
+            <Video
+              source={{ uri: lastVideoPath }}
+              style={{ width: 320, height: 180, borderRadius: 10 }}
+              controls
+              resizeMode="contain"
+              paused={false}
+              repeat={true}
+            />
+          </View>
+        )}
       </ScrollView>
-      
+
       <View style={styles.recorderContainer}>
         <Text style={styles.timer}>{formatTime(recordingTime)}</Text>
         <Text style={styles.status}>
           {isRecording ? 'Recording...' : 'Say "Jarvis" to start recording'}
         </Text>
       </View>
+
+      {/* Video recorder modal */}
+      <VideoRecorder
+        visible={showVideoRecorder}
+        onClose={() => setShowVideoRecorder(false)}
+        onVideoRecorded={handleVideoRecorded}
+      />
     </View>
   );
 };

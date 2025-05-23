@@ -1,6 +1,7 @@
 {
   "buildFiles": [
     "E:\\TAVI\\MyApp\\node_modules\\@picovoice\\react-native-voice-processor\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
+    "E:\\TAVI\\MyApp\\node_modules\\@react-native-async-storage\\async-storage\\android\\build\\generated\\source\\codegen\\jni\\CMakeLists.txt",
     "E:\\TAVI\\MyApp\\node_modules\\react-native\\ReactAndroid\\cmake-utils\\default-app-setup\\CMakeLists.txt"
   ],
   "cleanCommandsComponents": [
@@ -32,6 +33,11 @@
         "C:\\Users\\sahit\\.gradle\\caches\\8.13\\transforms\\8cb416b8178cb0e7f140959230f7f0bf\\transformed\\react-android-0.79.2-debug\\prefab\\modules\\jsi\\libs\\android.x86_64\\libjsi.so",
         "C:\\Users\\sahit\\.gradle\\caches\\8.13\\transforms\\8cb416b8178cb0e7f140959230f7f0bf\\transformed\\react-android-0.79.2-debug\\prefab\\modules\\reactnative\\libs\\android.x86_64\\libreactnative.so"
       ]
+    },
+    "react_codegen_rnasyncstorage::@1596841e19ec5b9eeffe": {
+      "artifactName": "react_codegen_rnasyncstorage",
+      "abi": "x86_64",
+      "runtimeFiles": []
     }
   }
 }
