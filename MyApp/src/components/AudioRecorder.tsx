@@ -225,8 +225,10 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
         name: 'recording.m4a'
       } as any);
 
-      console.log('Sending audio to backend:', {
-        url: `${BACKEND_URL}/process_audio/`,
+      const backendUrl = `${BACKEND_URL}/process_audio/`;
+      console.log('Attempting to connect to backend:', {
+        url: backendUrl,
+        platform: Platform.OS,
         fileUri,
         attempt: retryCount + 1
       });
@@ -235,35 +237,56 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-      const response = await fetch(`${BACKEND_URL}/process_audio/`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'multipart/form-data',
-        },
-        signal: controller.signal, // Add abort signal
-      });
+      try {
+        const response = await fetch(backendUrl, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'multipart/form-data',
+          },
+          signal: controller.signal,
+        });
 
-      clearTimeout(timeoutId); // Clear timeout if request succeeds
+        clearTimeout(timeoutId);
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Audio processed successfully:', data);
-        await processAudioResponse(data);
-        return data;
-      } else {
-        console.error('Failed to process audio:', response.status);
-        throw new Error(`Server error: ${response.status}`);
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Audio processed successfully:', data);
+          await processAudioResponse(data);
+          return data;
+        } else {
+          console.error('Backend response error:', {
+            status: response.status,
+            statusText: response.statusText,
+            url: backendUrl
+          });
+          throw new Error(`Server error: ${response.status} - ${response.statusText}`);
+        }
+      } catch (fetchError: unknown) {
+        const error = fetchError as Error;
+        console.error('Fetch error details:', {
+          error,
+          message: error.message,
+          name: error.name,
+          stack: error.stack
+        });
+        throw error;
       }
-    } catch (error) {
-      console.error(`Error sending audio to backend (attempt ${retryCount + 1}):`, error);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error(`Error sending audio to backend (attempt ${retryCount + 1}):`, {
+        error: err,
+        message: err.message,
+        name: err.name,
+        stack: err.stack
+      });
       
       // Type guard for error
-      const isNetworkError = error instanceof Error && (
-        error.name === 'TypeError' || 
-        error.name === 'AbortError' ||
-        error.message.includes('Network request failed')
+      const isNetworkError = err instanceof Error && (
+        err.name === 'TypeError' || 
+        err.name === 'AbortError' ||
+        err.message.includes('Network request failed')
       );
       
       // Retry logic for network errors
@@ -322,9 +345,10 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
     }
   };
 
-  // VIDEO HANDLING - Updated to match Python code behavior
+  // VIDEO HANDLING - Enhanced with better logging and error handling
   const handleVideoRecorded = async (videoFile: string) => {
-    console.log('Received video file path:', videoFile);
+    console.log('🎥 === VIDEO PROCESSING STARTED ===');
+    console.log('📝 Step 1: Received video file path:', videoFile);
     
     setLastVideoPath(videoFile);
     setMessages(prev => [...prev, { text: "Recording video for 5 seconds...", sender: 'Jarvis' }]);
@@ -332,18 +356,31 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
 
     // Send video to backend - matching Python implementation
     try {
+      console.log('📝 Step 2: Starting video backend processing...');
+      
       // Processing message (like Python code)
       setMessages(prev => [...prev, { text: "Just a moment... I'm processing what's around you.", sender: 'Jarvis' }]);
       onMicStatusChange?.(true); // Keep mic active during video processing
       
-      // Ensure proper file URI format
+      // Step 3: File URI validation and formatting
+      console.log('📝 Step 3: Validating and formatting file URI...');
       let fileUri = videoFile;
+      
+      // Check if file exists/is accessible
+      if (!videoFile || videoFile.trim() === '') {
+        throw new Error('❌ Video file path is empty or invalid');
+      }
+      
       if (Platform.OS === 'android' && !videoFile.startsWith('file://')) {
         fileUri = `file://${videoFile}`;
       }
       
-      console.log('Formatted file URI for upload:', fileUri);
+      console.log('✅ Original video path:', videoFile);
+      console.log('✅ Formatted file URI:', fileUri);
+      console.log('✅ Platform:', Platform.OS);
 
+      // Step 4: Generate filename and create FormData
+      console.log('📝 Step 4: Creating FormData for upload...');
       const formData = new FormData();
       
       // Generate filename similar to Python: f"{uuid.uuid4()}_video.mp4"
@@ -351,79 +388,176 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
       const randomId = Math.random().toString(36).substring(2, 15);
       const fileName = `${randomId}_${timestamp}_video.mp4`;
       
+      console.log('✅ Generated filename:', fileName);
+      
       formData.append('file', {
         uri: fileUri,
         type: 'video/mp4', // Force MP4 type
         name: fileName,
       } as any);
 
-      console.log('Sending video to backend:', {
-        url: `${BACKEND_URL}/process_video/`,
+      // Step 5: Network connectivity check
+      console.log('📝 Step 5: Checking network connectivity...');
+      const backendUrl = `${BACKEND_URL}/process_video/`;
+      console.log('✅ Backend URL:', backendUrl);
+      console.log('✅ BACKEND_URL constant:', BACKEND_URL);
+      
+      // Test basic connectivity first
+      try {
+        console.log('🔍 Testing basic connectivity to backend...');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        try {
+          const connectivityTest = await fetch(BACKEND_URL, {
+            method: 'GET',
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          console.log('✅ Basic connectivity test result:', connectivityTest.status);
+        } catch (error) {
+          clearTimeout(timeoutId);
+          console.error('❌ Basic connectivity test failed:', error);
+        }
+      } catch (connectivityError) {
+        console.error('❌ Basic connectivity test failed:', connectivityError);
+        throw new Error(`Cannot reach backend server at ${BACKEND_URL}. Please check if your backend is running.`);
+      }
+
+      // Step 6: Upload video to backend
+      console.log('📝 Step 6: Uploading video to backend...');
+      console.log('🚀 Upload details:', {
+        url: backendUrl,
+        method: 'POST',
+        fileName,
         fileUri,
-        fileName
+        timestamp: new Date().toISOString()
       });
 
-      // Send to backend (matching Python requests.post)
-      const response = await fetch(`${BACKEND_URL}/process_video/`, {
+      // Add timeout and abort controller
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.warn('⏰ Request timeout - aborting video upload');
+        controller.abort();
+      }, 60000); // 60 second timeout for video upload
+
+      const response = await fetch(backendUrl, {
         method: 'POST',
         body: formData,
         headers: {
           'Accept': 'application/json',
         },
+        signal: controller.signal,
       });
 
-      console.log('Response status:', response.status);
-
+      clearTimeout(timeoutId);
+      
+      console.log('📝 Step 7: Processing backend response...');
+      console.log('✅ Response status:', response.status);
+      console.log('✅ Response headers:', response.headers);
+      
       if (response.status === 200) { // Matching Python: if response.status_code == 200
+        console.log('✅ Video upload successful! Processing response...');
+        
         const videoData = await response.json();
-        console.log('Video processed successfully:', videoData);
+        console.log('✅ Video data received:', {
+          hasTextSummary: !!videoData.text_summary,
+          hasAudioFile: !!videoData.audio_file,
+          textSummaryLength: videoData.text_summary?.length || 0,
+          audioFile: videoData.audio_file
+        });
         
         const textSummary = videoData.text_summary || '';
         const videoAudioRelative = videoData.audio_file || '';
         const fullAudioUrl = `${BACKEND_URL}${videoAudioRelative}`;
 
-        // Display video summary (matching Python behavior)
+        console.log('🔊 Generated audio URL:', fullAudioUrl);
+
+        // Step 8: Display video summary (matching Python behavior)
+        console.log('📝 Step 8: Displaying video summary...');
         setMessages(prev => [
           ...prev,
           { text: `Based on what I see, here's my take on what's around you: ${textSummary}`, sender: 'Jarvis' }
         ]);
         
-        // Play TTS audio (matching Python self.play_audio(full_audio_url))
+        // Step 9: Play TTS audio (matching Python self.play_audio(full_audio_url))
+        console.log('📝 Step 9: Playing video summary audio...');
         try {
           await SoundPlayer.playUrl(fullAudioUrl);
-          console.log('Playing video summary audio:', fullAudioUrl);
-        } catch (e) {
-          console.error('Could not play video summary audio:', e);
+          console.log('✅ Video summary audio played successfully');
+        } catch (audioError) {
+          console.error('❌ Could not play video summary audio:', audioError);
+          setMessages(prev => [...prev, { 
+            text: "I processed the video but couldn't play the audio response.", 
+            sender: 'Jarvis' 
+          }]);
         }
         
-        // Note: Video display is already handled by lastVideoPath state
+        // Step 10: Complete processing
+        console.log('📝 Step 10: Video processing completed successfully');
         setMessages(prev => [...prev, { text: "Saving your video in our chat", sender: 'assistant' }]);
         
         // LONGER DELAY before restarting Porcupine after video processing
         setTimeout(() => {
-          console.log('🔄 Restarting Porcupine after video processing...');
+          console.log('🔄 Restarting Porcupine after successful video processing...');
           startNewPorcupineListening();
         }, 5000); // Increased to 5 seconds
         
       } else {
-        console.error('Backend error:', response.status);
-        setMessages(prev => [...prev, { text: `Error from video API: ${response.status}`, sender: 'Jarvis' }]);
+        // Handle non-200 responses
+        console.error('❌ Backend returned error status:', response.status);
+        
+        let errorText = '';
+        try {
+          errorText = await response.text();
+          console.error('❌ Error response body:', errorText);
+        } catch (textError) {
+          console.error('❌ Could not read error response:', textError);
+        }
+        
+        setMessages(prev => [...prev, { 
+          text: `Error from video API (${response.status}): ${errorText || 'Unknown error'}`, 
+          sender: 'Jarvis' 
+        }]);
+        
         // Start new instance even on error
         setTimeout(() => {
+          console.log('🔄 Restarting Porcupine after backend error...');
           startNewPorcupineListening();
         }, 3000);
       }
     } catch (err) {
-      console.error('Video capture error:', err);
+      console.error('🚨 === VIDEO PROCESSING ERROR ===');
+      console.error('❌ Error type:', err instanceof Error ? err.name : typeof err);
+      console.error('❌ Error message:', err instanceof Error ? err.message : String(err));
+      console.error('❌ Error stack:', err instanceof Error ? err.stack : 'No stack available');
+      
+      // Determine error type and provide specific feedback
+      let userMessage = "Error during video capture. Please try again.";
+      
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          userMessage = "Video upload timed out. Please check your connection and try again.";
+        } else if (err.message.includes('Network request failed')) {
+          userMessage = "Network connection failed. Please check if your backend server is running and try again.";
+        } else if (err.message.includes('Cannot reach backend')) {
+          userMessage = err.message; // Use the specific connectivity error message
+        }
+      }
+      
       setMessages(prev => [...prev, { 
-        text: "Error during video capture. Please try again.", 
+        text: userMessage, 
         sender: 'Jarvis' 
       }]);
+      
       // Start new instance on error
       setTimeout(() => {
+        console.log('🔄 Restarting Porcupine after video error...');
         startNewPorcupineListening();
       }, 3000);
     }
+    
+    console.log('🎥 === VIDEO PROCESSING ENDED ===');
   };
 
   const formatTime = (milliseconds: number) => {
