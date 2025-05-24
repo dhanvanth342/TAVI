@@ -169,7 +169,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const processAudioResponse = async (data: AudioResponse) => {
     try {
       setIsProcessing(true);
-      onMicStatusChange?.(true); // Keep mic active during processing
+      onMicStatusChange?.(true);
 
       // Add user's transcript message
       setMessages(prev => [...prev, { text: data.transcript, sender: 'user' }]);
@@ -178,19 +178,23 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
       setMessages(prev => [...prev, { text: "Hang tight, I'm processing that for you!", sender: 'Jarvis' }]);
 
       if (data.data1.Record) {
-        // Handle Record intent
         setMessages(prev => [...prev, { text: "Got it! You'd like to start recording—camera's coming on.", sender: 'Jarvis' }]);
         setShowVideoRecorder(true);
       } else {
-        // Handle normal response
         setMessages(prev => [...prev, { text: "Umm... here's what I know!", sender: 'Jarvis' }]);
-        // Play the audio response
+        
+        // Play audio with error handling
         const audioUrl = `${BACKEND_URL}${data.data3}`;
-        await SoundPlayer.playUrl(audioUrl);
-        // Add the response text
+        try {
+          await SoundPlayer.playUrl(audioUrl);
+        } catch (audioError) {
+          console.error('Error playing audio:', audioError);
+          setMessages(prev => [...prev, { text: "I had trouble playing the audio, but here's the text response.", sender: 'Jarvis' }]);
+        }
+        
         setMessages(prev => [...prev, { text: data.data2, sender: 'Jarvis' }]);
         
-        // Start new Porcupine instance after response
+        // Restart Porcupine after successful response
         setTimeout(() => {
           startNewPorcupineListening();
         }, 2000);
@@ -198,7 +202,6 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
     } catch (error) {
       console.error('Error processing audio response:', error);
       setMessages(prev => [...prev, { text: "Sorry, I encountered an error processing your request.", sender: 'Jarvis' }]);
-      // Start new instance even on error
       setTimeout(() => {
         startNewPorcupineListening();
       }, 2000);
@@ -207,7 +210,9 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
     }
   };
 
-  const sendAudioToBackend = async (audioFilePath: string) => {
+  const sendAudioToBackend = async (audioFilePath: string, retryCount = 0) => {
+    const maxRetries = 2;
+    
     try {
       const fileUri = Platform.OS === 'android'
         ? `file://${audioFilePath}`
@@ -222,8 +227,13 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
 
       console.log('Sending audio to backend:', {
         url: `${BACKEND_URL}/process_audio/`,
-        fileUri
+        fileUri,
+        attempt: retryCount + 1
       });
+
+      // Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
       const response = await fetch(`${BACKEND_URL}/process_audio/`, {
         method: 'POST',
@@ -232,23 +242,54 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
           'Accept': 'application/json',
           'Content-Type': 'multipart/form-data',
         },
+        signal: controller.signal, // Add abort signal
       });
+
+      clearTimeout(timeoutId); // Clear timeout if request succeeds
 
       if (response.ok) {
         const data = await response.json();
         console.log('Audio processed successfully:', data);
-        await processAudioResponse(data); // Process the response
+        await processAudioResponse(data);
         return data;
       } else {
         console.error('Failed to process audio:', response.status);
-        // Restart Porcupine even on backend error
-        setTimeout(() => {
-          startNewPorcupineListening();
-        }, 2000);
+        throw new Error(`Server error: ${response.status}`);
       }
     } catch (error) {
-      console.error('Error sending audio to backend:', error);
-      // Restart Porcupine on network error
+      console.error(`Error sending audio to backend (attempt ${retryCount + 1}):`, error);
+      
+      // Type guard for error
+      const isNetworkError = error instanceof Error && (
+        error.name === 'TypeError' || 
+        error.name === 'AbortError' ||
+        error.message.includes('Network request failed')
+      );
+      
+      // Retry logic for network errors
+      if (retryCount < maxRetries && isNetworkError) {
+        console.log(`Retrying audio upload... (${retryCount + 1}/${maxRetries})`);
+        setMessages(prev => [...prev, { 
+          text: `Connection hiccup, trying again... (${retryCount + 1}/${maxRetries + 1})`, 
+          sender: 'Jarvis' 
+        }]);
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 2000 * (retryCount + 1)));
+        return sendAudioToBackend(audioFilePath, retryCount + 1);
+      }
+      
+      // Max retries reached or non-network error
+      const errorMessage = retryCount >= maxRetries 
+        ? "I'm having trouble connecting to my brain right now. Let me get back to listening!"
+        : "Hmm, seems like I lost connection. No worries, I'm back to listening now!";
+        
+      setMessages(prev => [...prev, { 
+        text: errorMessage, 
+        sender: 'Jarvis' 
+      }]);
+      
+      // Always restart Porcupine on failure
       setTimeout(() => {
         startNewPorcupineListening();
       }, 2000);
