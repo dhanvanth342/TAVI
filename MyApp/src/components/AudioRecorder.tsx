@@ -112,52 +112,35 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
         porcupineAccessKey,
         keywords,
         () => {
-          // Wake word detected
-          console.log('Jarvis detected! Starting audio recording...');
+          console.log('🎤 JARVIS DETECTED! Wake word triggered!');
+          onMicStatusChange?.(true); // Keep mic active during detection
+          
           if (!isRecording) {
+            console.log('✅ Starting audio recording after wake word detection');
             startRecording();
+          } else {
+            console.log('⚠️ Already recording, ignoring wake word');
           }
         },
         (error) => {
           console.error('Porcupine processing error:', error);
-          onMicStatusChange?.(false);
+          console.log('Attempting to recover from Porcupine error...');
+          setTimeout(() => {
+            startNewPorcupineListening();
+          }, 2000);
         }
       );
 
       console.log('Porcupine initialized successfully');
       setPorcupineManager(manager);
       await manager.start();
-      onMicStatusChange?.(true);
-      console.log('Porcupine started listening');
+      onMicStatusChange?.(true); // Ensure mic status is active
+      console.log('Porcupine started listening for "Jarvis"');
     } catch (error) {
       console.error('Failed to initialize Porcupine:', error);
       onMicStatusChange?.(false);
     }
   };
-
-  useEffect(() => {
-    const setupPorcupine = async () => {
-      const hasPermission = await requestRecordAudioPermission();
-      if (hasPermission) {
-        await initPorcupine();
-      } else {
-        console.error('Microphone permission denied');
-        onMicStatusChange?.(false);
-      }
-    };
-
-    setupPorcupine();
-
-    return () => {
-      if (porcupineManager) {
-        porcupineManager.delete();
-      }
-      if (isRecording) {
-        stopRecording();
-      }
-      onMicStatusChange?.(false);
-    };
-  }, [porcupineAccessKey]);
 
   const startRecording = async () => {
     const hasPermission = await requestRecordAudioPermission();
@@ -186,6 +169,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const processAudioResponse = async (data: AudioResponse) => {
     try {
       setIsProcessing(true);
+      onMicStatusChange?.(true); // Keep mic active during processing
 
       // Add user's transcript message
       setMessages(prev => [...prev, { text: data.transcript, sender: 'user' }]);
@@ -202,17 +186,22 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
         setMessages(prev => [...prev, { text: "Umm... here's what I know!", sender: 'Jarvis' }]);
         // Play the audio response
         const audioUrl = `${BACKEND_URL}${data.data3}`;
-        try {
-          await SoundPlayer.playUrl(audioUrl);
-        } catch (error) {
-          console.error('Error playing audio:', error);
-        }
+        await SoundPlayer.playUrl(audioUrl);
         // Add the response text
         setMessages(prev => [...prev, { text: data.data2, sender: 'Jarvis' }]);
+        
+        // Start new Porcupine instance after response
+        setTimeout(() => {
+          startNewPorcupineListening();
+        }, 2000);
       }
     } catch (error) {
       console.error('Error processing audio response:', error);
       setMessages(prev => [...prev, { text: "Sorry, I encountered an error processing your request.", sender: 'Jarvis' }]);
+      // Start new instance even on error
+      setTimeout(() => {
+        startNewPorcupineListening();
+      }, 2000);
     } finally {
       setIsProcessing(false);
     }
@@ -248,13 +237,21 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
       if (response.ok) {
         const data = await response.json();
         console.log('Audio processed successfully:', data);
-        await processAudioResponse(data);
+        await processAudioResponse(data); // Process the response
         return data;
       } else {
         console.error('Failed to process audio:', response.status);
+        // Restart Porcupine even on backend error
+        setTimeout(() => {
+          startNewPorcupineListening();
+        }, 2000);
       }
     } catch (error) {
       console.error('Error sending audio to backend:', error);
+      // Restart Porcupine on network error
+      setTimeout(() => {
+        startNewPorcupineListening();
+      }, 2000);
     }
   };
 
@@ -264,7 +261,10 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
       audioRecorderPlayer.removeRecordBackListener();
       setIsRecording(false);
       setRecordingTime(0);
-      console.log('Recording stopped:', result);
+      console.log('Recording stopped and microphone released:', result);
+
+      // IMPORTANT: Wait a moment for microphone to be fully released
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Send the audio to backend
       await sendAudioToBackend(result);
@@ -274,6 +274,10 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
       }
     } catch (error) {
       console.error('Failed to stop recording:', error);
+      // Still try to restart Porcupine even if stopping fails
+      setTimeout(() => {
+        startNewPorcupineListening();
+      }, 2000);
     }
   };
 
@@ -289,6 +293,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
     try {
       // Processing message (like Python code)
       setMessages(prev => [...prev, { text: "Just a moment... I'm processing what's around you.", sender: 'Jarvis' }]);
+      onMicStatusChange?.(true); // Keep mic active during video processing
       
       // Ensure proper file URI format
       let fileUri = videoFile;
@@ -353,9 +358,19 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
         // Note: Video display is already handled by lastVideoPath state
         setMessages(prev => [...prev, { text: "Saving your video in our chat", sender: 'assistant' }]);
         
+        // LONGER DELAY before restarting Porcupine after video processing
+        setTimeout(() => {
+          console.log('🔄 Restarting Porcupine after video processing...');
+          startNewPorcupineListening();
+        }, 5000); // Increased to 5 seconds
+        
       } else {
         console.error('Backend error:', response.status);
         setMessages(prev => [...prev, { text: `Error from video API: ${response.status}`, sender: 'Jarvis' }]);
+        // Start new instance even on error
+        setTimeout(() => {
+          startNewPorcupineListening();
+        }, 3000);
       }
     } catch (err) {
       console.error('Video capture error:', err);
@@ -363,6 +378,10 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
         text: "Error during video capture. Please try again.", 
         sender: 'Jarvis' 
       }]);
+      // Start new instance on error
+      setTimeout(() => {
+        startNewPorcupineListening();
+      }, 3000);
     }
   };
 
@@ -399,6 +418,97 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
     }
     return false;
   };
+
+  // Start new Porcupine listening session
+  const startNewPorcupineListening = async () => {
+    try {
+      console.log('🔄 Starting new Porcupine listening session...');
+      
+      // IMPORTANT: Make sure audio recorder is completely stopped
+      if (isRecording) {
+        console.log('⚠️ Audio still recording, stopping first...');
+        try {
+          await audioRecorderPlayer.stopRecorder();
+          audioRecorderPlayer.removeRecordBackListener();
+          setIsRecording(false);
+          setRecordingTime(0);
+        } catch (e) {
+          console.warn('Error stopping audio recorder:', e);
+        }
+      }
+
+      // Clean up existing instance if it exists
+      if (porcupineManager) {
+        try {
+          await porcupineManager.stop();
+          porcupineManager.delete();
+          console.log('Previous Porcupine instance cleaned up');
+        } catch (cleanupError) {
+          console.warn('Error cleaning up previous Porcupine:', cleanupError);
+        }
+      }
+      
+      // Reset the manager
+      setPorcupineManager(null);
+      
+      // IMPORTANT: Wait for cleanup to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Create and start new Porcupine instance
+      await initPorcupine();
+      console.log('✅ New Porcupine instance created and listening for "Jarvis"');
+      setMessages(prev => [...prev, { text: "Just say 'Jarvis' if you need my help again!", sender: 'assistant' }]);
+      
+    } catch (error) {
+      console.error('Failed to start new Porcupine:', error);
+      onMicStatusChange?.(true); // Keep mic active even on error
+      
+      setMessages(prev => [...prev, { 
+        text: "Having some trouble with my hearing, but I'll keep trying to listen!", 
+        sender: 'Jarvis' 
+      }]);
+      
+      // Retry after a longer delay
+      setTimeout(() => {
+        console.log('🔄 Retrying Porcupine initialization...');
+        startNewPorcupineListening();
+      }, 5000); // Increased delay to 5 seconds
+    }
+  };
+
+  // Add a test function to check if wake word detection is working:
+  const testWakeWordDetection = () => {
+    console.log('🧪 Testing wake word detection...');
+    console.log('Porcupine manager exists:', !!porcupineManager);
+    console.log('Is recording:', isRecording);
+    console.log('Current state:', { isRecording, isProcessing });
+  };
+
+  useEffect(() => {
+    const setupPorcupine = async () => {
+      const hasPermission = await requestRecordAudioPermission();
+      if (hasPermission) {
+        await initPorcupine();
+      } else {
+        console.error('Microphone permission denied');
+        onMicStatusChange?.(false);
+      }
+    };
+
+    setupPorcupine();
+
+    return () => {
+      // Only cleanup when component unmounts
+      if (porcupineManager) {
+        porcupineManager.delete();
+      }
+      if (isRecording) {
+        stopRecording();
+      }
+      // Only set mic to false on component unmount
+      onMicStatusChange?.(false);
+    };
+  }, [porcupineAccessKey]);
 
   return (
     <View style={[styles.container, style]}>
