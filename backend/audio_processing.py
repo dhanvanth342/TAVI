@@ -206,9 +206,9 @@ class AudioProcessing:
         try:
             # (a) Record intent: return empty response text and an empty audio file.
             if data1.get("Record"):
-                data2 = ""
-                with open(audio_output_path, "wb") as f:
-                    f.write(b"")
+                #data2 = ""
+                data2 = "I am recording your video now."
+                self.text_to_speech(data2, audio_output_path)
             # (b) General intent: Use transcript to query ChatGroq for a brief answer.
             elif data1.get("General"):
                 messages = [

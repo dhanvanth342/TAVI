@@ -1,732 +1,240 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Platform,
   PermissionsAndroid,
-  ScrollView
+  ScrollView,
+  ViewStyle
 } from 'react-native';
 import AudioRecorderPlayer from 'react-native-audio-recorder-player';
-import { PorcupineManager, BuiltInKeywords } from '@picovoice/porcupine-react-native';
+import axios from 'axios';
+import {
+  PorcupineManager,
+  BuiltInKeywords
+} from '@picovoice/porcupine-react-native';
 import SoundPlayer from 'react-native-sound-player';
 import VideoRecorder from './VideoRecorder';
 import Video from 'react-native-video';
 
-// Update the BACKEND_URL to handle Android emulator
+// Backend URL for emulator and simulator
 const BACKEND_URL = Platform.select({
-  android: 'http://10.0.2.2:8000', // Android emulator localhost
-  ios: 'http://127.0.0.1:8000',    // iOS simulator localhost
+  android: 'http://10.0.2.2:8000',
+  ios: 'http://127.0.0.1:8000',
   default: 'http://127.0.0.1:8000'
 });
 
-interface AudioRecorderProps {
-  onRecordingComplete?: (uri: string) => void;
-  onMicStatusChange?: (status: boolean) => void;
-  onTestMicrophone?: () => Promise<void>;
-  onCheckPorcupineStatus?: () => Promise<boolean>;
-  style?: any;
-  porcupineAccessKey: string;
-}
-
-interface AudioResponse {
-  data1: {
-    Record: boolean;
-    General: boolean;
-    Fallback: boolean;
-    Tavi: boolean;
-  };
+type AudioResponse = {
+  data1: { Record: boolean };
   data2: string;
   data3: string;
   transcript: string;
-}
+};
 
-interface Message {
+type Message = {
   text: string;
   sender: 'user' | 'Jarvis' | 'assistant';
+};
+
+interface AudioRecorderProps {
+  porcupineAccessKey: string;
+  onRecordingComplete?: (uri: string) => void;
+  onMicStatusChange?: (active: boolean) => void;
+  onTestMicrophone?: () => Promise<void>;
+  onCheckPorcupineStatus?: () => Promise<boolean>;
+  style?: ViewStyle;
+  greetingsCompleted?: boolean;
 }
 
 const AudioRecorder: React.FC<AudioRecorderProps> = ({
+  porcupineAccessKey,
   onRecordingComplete,
   onMicStatusChange,
   onTestMicrophone,
   onCheckPorcupineStatus,
   style,
-  porcupineAccessKey
+  greetingsCompleted
 }) => {
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const [audioRecorderPlayer] = useState(new AudioRecorderPlayer());
-  const [porcupineManager, setPorcupineManager] = useState<PorcupineManager | null>(null);
+  const audioPlayer = useRef(new AudioRecorderPlayer()).current;
+  const [porcupine, setPorcupine] = useState<PorcupineManager | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [showVideo, setShowVideo] = useState(false);
+  const [lastVideoUri, setLastVideoUri] = useState<string | null>(null);
 
-  // For video capture
-  const [showVideoRecorder, setShowVideoRecorder] = useState(false);
-  const [lastVideoPath, setLastVideoPath] = useState<string | null>(null);
-
-  const requestRecordAudioPermission = async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-          {
-            title: 'Microphone Permission',
-            message: 'App needs access to your microphone to detect wake word.',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          }
-        );
-        return granted === PermissionsAndroid.RESULTS.GRANTED;
-      } catch (err) {
-        console.warn(err);
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const checkPermissions = async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.check(
-          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO
-        );
-        console.log('Microphone permission:', granted ? 'Granted' : 'Denied');
-        return granted;
-      } catch (err) {
-        console.error('Permission check failed:', err);
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const initPorcupine = async () => {
-    try {
-      console.log('Initializing Porcupine...');
-      const keywords: BuiltInKeywords[] = [BuiltInKeywords.JARVIS];
-
-      const manager = await PorcupineManager.fromBuiltInKeywords(
-        porcupineAccessKey,
-        keywords,
-        () => {
-          console.log('🎤 JARVIS DETECTED! Wake word triggered!');
-          onMicStatusChange?.(true); // Keep mic active during detection
-          
-          if (!isRecording) {
-            console.log('✅ Starting audio recording after wake word detection');
-            startRecording();
-          } else {
-            console.log('⚠️ Already recording, ignoring wake word');
-          }
-        },
-        (error) => {
-          console.error('Porcupine processing error:', error);
-          console.log('Attempting to recover from Porcupine error...');
-          setTimeout(() => {
-            startNewPorcupineListening();
-          }, 2000);
-        }
-      );
-
-      console.log('Porcupine initialized successfully');
-      setPorcupineManager(manager);
-      await manager.start();
-      onMicStatusChange?.(true); // Ensure mic status is active
-      console.log('Porcupine started listening for "Jarvis"');
-    } catch (error) {
-      console.error('Failed to initialize Porcupine:', error);
-      onMicStatusChange?.(false);
-    }
-  };
-
-  const startRecording = async () => {
-    const hasPermission = await requestRecordAudioPermission();
-    if (!hasPermission) {
-      console.log('Permission denied');
-      return;
-    }
-
-    try {
-      const result = await audioRecorderPlayer.startRecorder();
-      console.log('Microphone turned on - Recording started');
-      audioRecorderPlayer.addRecordBackListener((e) => {
-        setRecordingTime(e.currentPosition);
-        // Stop recording after 7 seconds
-        if (e.currentPosition >= 7000) {
-          stopRecording();
-        }
-      });
-      setIsRecording(true);
-      console.log('Recording started:', result);
-    } catch (error) {
-      console.error('Failed to start recording:', error);
-    }
-  };
-
-  const processAudioResponse = async (data: AudioResponse) => {
-    try {
-      setIsProcessing(true);
-      onMicStatusChange?.(true);
-
-      // Add user's transcript message
-      setMessages(prev => [...prev, { text: data.transcript, sender: 'user' }]);
-
-      // Add processing message
-      setMessages(prev => [...prev, { text: "Hang tight, I'm processing that for you!", sender: 'Jarvis' }]);
-
-      if (data.data1.Record) {
-        setMessages(prev => [...prev, { text: "Got it! You'd like to start recording—camera's coming on.", sender: 'Jarvis' }]);
-        setShowVideoRecorder(true);
-      } else {
-        setMessages(prev => [...prev, { text: "Umm... here's what I know!", sender: 'Jarvis' }]);
-        
-        // Play audio with error handling
-        const audioUrl = `${BACKEND_URL}${data.data3}`;
-        try {
-          await SoundPlayer.playUrl(audioUrl);
-        } catch (audioError) {
-          console.error('Error playing audio:', audioError);
-          setMessages(prev => [...prev, { text: "I had trouble playing the audio, but here's the text response.", sender: 'Jarvis' }]);
-        }
-        
-        setMessages(prev => [...prev, { text: data.data2, sender: 'Jarvis' }]);
-        
-        // Restart Porcupine after successful response
-        setTimeout(() => {
-          startNewPorcupineListening();
-        }, 2000);
-      }
-    } catch (error) {
-      console.error('Error processing audio response:', error);
-      setMessages(prev => [...prev, { text: "Sorry, I encountered an error processing your request.", sender: 'Jarvis' }]);
-      setTimeout(() => {
-        startNewPorcupineListening();
-      }, 2000);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const sendAudioToBackend = async (audioFilePath: string, retryCount = 0) => {
-    const maxRetries = 2;
-    
-    try {
-      const fileUri = Platform.OS === 'android'
-        ? `file://${audioFilePath}`
-        : audioFilePath;
-
-      const formData = new FormData();
-      formData.append('file', {
-        uri: fileUri,
-        type: 'audio/mp4',
-        name: 'recording.m4a'
-      } as any);
-
-      const backendUrl = `${BACKEND_URL}/process_audio/`;
-      console.log('Attempting to connect to backend:', {
-        url: backendUrl,
-        platform: Platform.OS,
-        fileUri,
-        attempt: retryCount + 1
-      });
-
-      // Add timeout to prevent hanging requests
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
-      try {
-        const response = await fetch(backendUrl, {
-          method: 'POST',
-          body: formData,
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'multipart/form-data',
-          },
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          const data = await response.json();
-          console.log('Audio processed successfully:', data);
-          await processAudioResponse(data);
-          return data;
-        } else {
-          console.error('Backend response error:', {
-            status: response.status,
-            statusText: response.statusText,
-            url: backendUrl
-          });
-          throw new Error(`Server error: ${response.status} - ${response.statusText}`);
-        }
-      } catch (fetchError: unknown) {
-        const error = fetchError as Error;
-        console.error('Fetch error details:', {
-          error,
-          message: error.message,
-          name: error.name,
-          stack: error.stack
-        });
-        throw error;
-      }
-    } catch (error: unknown) {
-      const err = error as Error;
-      console.error(`Error sending audio to backend (attempt ${retryCount + 1}):`, {
-        error: err,
-        message: err.message,
-        name: err.name,
-        stack: err.stack
-      });
-      
-      // Type guard for error
-      const isNetworkError = err instanceof Error && (
-        err.name === 'TypeError' || 
-        err.name === 'AbortError' ||
-        err.message.includes('Network request failed')
-      );
-      
-      // Retry logic for network errors
-      if (retryCount < maxRetries && isNetworkError) {
-        console.log(`Retrying audio upload... (${retryCount + 1}/${maxRetries})`);
-        setMessages(prev => [...prev, { 
-          text: `Connection hiccup, trying again... (${retryCount + 1}/${maxRetries + 1})`, 
-          sender: 'Jarvis' 
-        }]);
-        
-        // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, 2000 * (retryCount + 1)));
-        return sendAudioToBackend(audioFilePath, retryCount + 1);
-      }
-      
-      // Max retries reached or non-network error
-      const errorMessage = retryCount >= maxRetries 
-        ? "I'm having trouble connecting to my brain right now. Let me get back to listening!"
-        : "Hmm, seems like I lost connection. No worries, I'm back to listening now!";
-        
-      setMessages(prev => [...prev, { 
-        text: errorMessage, 
-        sender: 'Jarvis' 
-      }]);
-      
-      // Always restart Porcupine on failure
-      setTimeout(() => {
-        startNewPorcupineListening();
-      }, 2000);
-    }
-  };
-
-  const stopRecording = async () => {
-    try {
-      const result = await audioRecorderPlayer.stopRecorder();
-      audioRecorderPlayer.removeRecordBackListener();
-      setIsRecording(false);
-      setRecordingTime(0);
-      console.log('Recording stopped and microphone released:', result);
-
-      // IMPORTANT: Wait a moment for microphone to be fully released
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Send the audio to backend
-      await sendAudioToBackend(result);
-
-      if (onRecordingComplete) {
-        onRecordingComplete(result);
-      }
-    } catch (error) {
-      console.error('Failed to stop recording:', error);
-      // Still try to restart Porcupine even if stopping fails
-      setTimeout(() => {
-        startNewPorcupineListening();
-      }, 2000);
-    }
-  };
-
-  // VIDEO HANDLING - Enhanced with better logging and error handling
-  const handleVideoRecorded = async (videoFile: string) => {
-    console.log('🎥 === VIDEO PROCESSING STARTED ===');
-    console.log('📝 Step 1: Received video file path:', videoFile);
-    
-    setLastVideoPath(videoFile);
-    setMessages(prev => [...prev, { text: "Recording video for 5 seconds...", sender: 'Jarvis' }]);
-    setShowVideoRecorder(false);
-
-    // Send video to backend - matching Python implementation
-    try {
-      console.log('📝 Step 2: Starting video backend processing...');
-      
-      // Processing message (like Python code)
-      setMessages(prev => [...prev, { text: "Just a moment... I'm processing what's around you.", sender: 'Jarvis' }]);
-      onMicStatusChange?.(true); // Keep mic active during video processing
-      
-      // Step 3: File URI validation and formatting
-      console.log('📝 Step 3: Validating and formatting file URI...');
-      let fileUri = videoFile;
-      
-      // Check if file exists/is accessible
-      if (!videoFile || videoFile.trim() === '') {
-        throw new Error('❌ Video file path is empty or invalid');
-      }
-      
-      if (Platform.OS === 'android' && !videoFile.startsWith('file://')) {
-        fileUri = `file://${videoFile}`;
-      }
-      
-      console.log('✅ Original video path:', videoFile);
-      console.log('✅ Formatted file URI:', fileUri);
-      console.log('✅ Platform:', Platform.OS);
-
-      // Step 4: Generate filename and create FormData
-      console.log('📝 Step 4: Creating FormData for upload...');
-      const formData = new FormData();
-      
-      // Generate filename similar to Python: f"{uuid.uuid4()}_video.mp4"
-      const timestamp = Date.now();
-      const randomId = Math.random().toString(36).substring(2, 15);
-      const fileName = `${randomId}_${timestamp}_video.mp4`;
-      
-      console.log('✅ Generated filename:', fileName);
-      
-      formData.append('file', {
-        uri: fileUri,
-        type: 'video/mp4', // Force MP4 type
-        name: fileName,
-      } as any);
-
-      // Step 5: Network connectivity check
-      console.log('📝 Step 5: Checking network connectivity...');
-      const backendUrl = `${BACKEND_URL}/process_video/`;
-      console.log('✅ Backend URL:', backendUrl);
-      console.log('✅ BACKEND_URL constant:', BACKEND_URL);
-      
-      // Test basic connectivity first
-      try {
-        console.log('🔍 Testing basic connectivity to backend...');
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
-        try {
-          const connectivityTest = await fetch(BACKEND_URL, {
-            method: 'GET',
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-          console.log('✅ Basic connectivity test result:', connectivityTest.status);
-        } catch (error) {
-          clearTimeout(timeoutId);
-          console.error('❌ Basic connectivity test failed:', error);
-        }
-      } catch (connectivityError) {
-        console.error('❌ Basic connectivity test failed:', connectivityError);
-        throw new Error(`Cannot reach backend server at ${BACKEND_URL}. Please check if your backend is running.`);
-      }
-
-      // Step 6: Upload video to backend
-      console.log('📝 Step 6: Uploading video to backend...');
-      console.log('🚀 Upload details:', {
-        url: backendUrl,
-        method: 'POST',
-        fileName,
-        fileUri,
-        timestamp: new Date().toISOString()
-      });
-
-      // Add timeout and abort controller
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        console.warn('⏰ Request timeout - aborting video upload');
-        controller.abort();
-      }, 60000); // 60 second timeout for video upload
-
-      const response = await fetch(backendUrl, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Accept': 'application/json',
-        },
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      
-      console.log('📝 Step 7: Processing backend response...');
-      console.log('✅ Response status:', response.status);
-      console.log('✅ Response headers:', response.headers);
-      
-      if (response.status === 200) { // Matching Python: if response.status_code == 200
-        console.log('✅ Video upload successful! Processing response...');
-        
-        const videoData = await response.json();
-        console.log('✅ Video data received:', {
-          hasTextSummary: !!videoData.text_summary,
-          hasAudioFile: !!videoData.audio_file,
-          textSummaryLength: videoData.text_summary?.length || 0,
-          audioFile: videoData.audio_file
-        });
-        
-        const textSummary = videoData.text_summary || '';
-        const videoAudioRelative = videoData.audio_file || '';
-        const fullAudioUrl = `${BACKEND_URL}${videoAudioRelative}`;
-
-        console.log('🔊 Generated audio URL:', fullAudioUrl);
-
-        // Step 8: Display video summary (matching Python behavior)
-        console.log('📝 Step 8: Displaying video summary...');
-        setMessages(prev => [
-          ...prev,
-          { text: `Based on what I see, here's my take on what's around you: ${textSummary}`, sender: 'Jarvis' }
-        ]);
-        
-        // Step 9: Play TTS audio (matching Python self.play_audio(full_audio_url))
-        console.log('📝 Step 9: Playing video summary audio...');
-        try {
-          await SoundPlayer.playUrl(fullAudioUrl);
-          console.log('✅ Video summary audio played successfully');
-        } catch (audioError) {
-          console.error('❌ Could not play video summary audio:', audioError);
-          setMessages(prev => [...prev, { 
-            text: "I processed the video but couldn't play the audio response.", 
-            sender: 'Jarvis' 
-          }]);
-        }
-        
-        // Step 10: Complete processing
-        console.log('📝 Step 10: Video processing completed successfully');
-        setMessages(prev => [...prev, { text: "Saving your video in our chat", sender: 'assistant' }]);
-        
-        // LONGER DELAY before restarting Porcupine after video processing
-        setTimeout(() => {
-          console.log('🔄 Restarting Porcupine after successful video processing...');
-          startNewPorcupineListening();
-        }, 5000); // Increased to 5 seconds
-        
-      } else {
-        // Handle non-200 responses
-        console.error('❌ Backend returned error status:', response.status);
-        
-        let errorText = '';
-        try {
-          errorText = await response.text();
-          console.error('❌ Error response body:', errorText);
-        } catch (textError) {
-          console.error('❌ Could not read error response:', textError);
-        }
-        
-        setMessages(prev => [...prev, { 
-          text: `Error from video API (${response.status}): ${errorText || 'Unknown error'}`, 
-          sender: 'Jarvis' 
-        }]);
-        
-        // Start new instance even on error
-        setTimeout(() => {
-          console.log('🔄 Restarting Porcupine after backend error...');
-          startNewPorcupineListening();
-        }, 3000);
-      }
-    } catch (err) {
-      console.error('🚨 === VIDEO PROCESSING ERROR ===');
-      console.error('❌ Error type:', err instanceof Error ? err.name : typeof err);
-      console.error('❌ Error message:', err instanceof Error ? err.message : String(err));
-      console.error('❌ Error stack:', err instanceof Error ? err.stack : 'No stack available');
-      
-      // Determine error type and provide specific feedback
-      let userMessage = "Error during video capture. Please try again.";
-      
-      if (err instanceof Error) {
-        if (err.name === 'AbortError') {
-          userMessage = "Video upload timed out. Please check your connection and try again.";
-        } else if (err.message.includes('Network request failed')) {
-          userMessage = "Network connection failed. Please check if your backend server is running and try again.";
-        } else if (err.message.includes('Cannot reach backend')) {
-          userMessage = err.message; // Use the specific connectivity error message
-        }
-      }
-      
-      setMessages(prev => [...prev, { 
-        text: userMessage, 
-        sender: 'Jarvis' 
-      }]);
-      
-      // Start new instance on error
-      setTimeout(() => {
-        console.log('🔄 Restarting Porcupine after video error...');
-        startNewPorcupineListening();
-      }, 3000);
-    }
-    
-    console.log('🎥 === VIDEO PROCESSING ENDED ===');
-  };
-
-  const formatTime = (milliseconds: number) => {
-    const totalSeconds = Math.floor(milliseconds / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  const testMicrophone = async () => {
-    try {
-      const result = await audioRecorderPlayer.startRecorder();
-      console.log('Microphone test started:', result);
-      // Record for 1 second
-      setTimeout(async () => {
-        const testResult = await audioRecorderPlayer.stopRecorder();
-        console.log('Microphone test completed:', testResult);
-      }, 1000);
-    } catch (error) {
-      console.error('Microphone test failed:', error);
-    }
-  };
-
-  const checkPorcupineStatus = async () => {
-    if (porcupineManager) {
-      try {
-        // Check if manager exists and is not null
-        return true;
-      } catch (error) {
-        console.error('Porcupine status check failed:', error);
-        return false;
-      }
-    }
-    return false;
-  };
-
-  // Start new Porcupine listening session
-  const startNewPorcupineListening = async () => {
-    try {
-      console.log('🔄 Starting new Porcupine listening session...');
-      
-      // IMPORTANT: Make sure audio recorder is completely stopped
-      if (isRecording) {
-        console.log('⚠️ Audio still recording, stopping first...');
-        try {
-          await audioRecorderPlayer.stopRecorder();
-          audioRecorderPlayer.removeRecordBackListener();
-          setIsRecording(false);
-          setRecordingTime(0);
-        } catch (e) {
-          console.warn('Error stopping audio recorder:', e);
-        }
-      }
-
-      // Clean up existing instance if it exists
-      if (porcupineManager) {
-        try {
-          await porcupineManager.stop();
-          porcupineManager.delete();
-          console.log('Previous Porcupine instance cleaned up');
-        } catch (cleanupError) {
-          console.warn('Error cleaning up previous Porcupine:', cleanupError);
-        }
-      }
-      
-      // Reset the manager
-      setPorcupineManager(null);
-      
-      // IMPORTANT: Wait for cleanup to complete
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Create and start new Porcupine instance
-      await initPorcupine();
-      console.log('✅ New Porcupine instance created and listening for "Jarvis"');
-      setMessages(prev => [...prev, { text: "Just say 'Jarvis' if you need my help again!", sender: 'assistant' }]);
-      
-    } catch (error) {
-      console.error('Failed to start new Porcupine:', error);
-      onMicStatusChange?.(true); // Keep mic active even on error
-      
-      setMessages(prev => [...prev, { 
-        text: "Having some trouble with my hearing, but I'll keep trying to listen!", 
-        sender: 'Jarvis' 
-      }]);
-      
-      // Retry after a longer delay
-      setTimeout(() => {
-        console.log('🔄 Retrying Porcupine initialization...');
-        startNewPorcupineListening();
-      }, 5000); // Increased delay to 5 seconds
-    }
-  };
-
-  // Add a test function to check if wake word detection is working:
-  const testWakeWordDetection = () => {
-    console.log('🧪 Testing wake word detection...');
-    console.log('Porcupine manager exists:', !!porcupineManager);
-    console.log('Is recording:', isRecording);
-    console.log('Current state:', { isRecording, isProcessing });
-  };
-
+  // Kick off wake-word after greetings
   useEffect(() => {
-    const setupPorcupine = async () => {
-      const hasPermission = await requestRecordAudioPermission();
-      if (hasPermission) {
-        await initPorcupine();
-      } else {
-        console.error('Microphone permission denied');
-        onMicStatusChange?.(false);
-      }
-    };
-
-    setupPorcupine();
-
+    if (greetingsCompleted) initPorcupine();
     return () => {
-      // Only cleanup when component unmounts
-      if (porcupineManager) {
-        porcupineManager.delete();
-      }
-      if (isRecording) {
-        stopRecording();
-      }
-      // Only set mic to false on component unmount
-      onMicStatusChange?.(false);
+      porcupine?.delete();
+      audioPlayer.stopPlayer();
     };
-  }, [porcupineAccessKey]);
+  }, [greetingsCompleted]);
 
+  // Request mic permission (Android)
+  const requestMicPermission = async (): Promise<boolean> => {
+    if (Platform.OS === 'android') {
+      const res = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        { title: 'Microphone Permission', message: 'Need mic access for wake word.', buttonPositive: 'OK' }
+      );
+      console.log('Microphone permission:', res);
+      return res === PermissionsAndroid.RESULTS.GRANTED;
+    }
+    return true;
+  };
+
+  // Initialize Porcupine
+  const initPorcupine = async () => {
+    const granted = await requestMicPermission();
+    if (!granted) return onMicStatusChange?.(false);
+    console.log('Initializing Porcupine...');
+    const mgr = await PorcupineManager.fromBuiltInKeywords(
+      porcupineAccessKey,
+      [BuiltInKeywords.JARVIS],
+      async () => {
+        console.log('Wake word detected');
+        onMicStatusChange?.(true);
+        await pausePorcupine();
+        appendMessage('Wake word detected—recording audio...', 'Jarvis');
+        startAudioRecording();
+      }
+    );
+    setPorcupine(mgr);
+    await mgr.start();
+    onMicStatusChange?.(true);
+    appendMessage('Say "Jarvis" to start.', 'assistant');
+  };
+
+  const pausePorcupine = async () => {
+    if (!porcupine) return;
+    await porcupine.stop();
+    onMicStatusChange?.(false);
+    console.log('Porcupine paused');
+  };
+
+  const resumePorcupine = async () => {
+    if (!porcupine) return;
+    await porcupine.start();
+    onMicStatusChange?.(true);
+    console.log('Porcupine resumed');
+  };
+
+  const appendMessage = (text: string, sender: Message['sender']) => {
+    setMessages(prev => [...prev, { text, sender }]);
+  };
+
+  // Audio recording
+  const startAudioRecording = async () => {
+    console.log('Starting audio recording');
+    const path = await audioPlayer.startRecorder();
+    setIsRecording(true);
+    audioPlayer.addRecordBackListener(e => {
+      if (e.currentPosition >= 5000) stopAudioRecording();
+    });
+    appendMessage('Recording audio...', 'assistant');
+  };
+
+  const stopAudioRecording = async () => {
+    console.log('Stopping audio recording');
+    const path = await audioPlayer.stopRecorder();
+    audioPlayer.removeRecordBackListener();
+    setIsRecording(false);
+    appendMessage('Audio recorded. Sending to server...', 'assistant');
+    onRecordingComplete?.(path);
+    sendAudioToServer(path);
+  };
+
+  // Send audio
+  const sendAudioToServer = async (path: string) => {
+    const uri = Platform.OS === 'android' ? `file://${path}` : path;
+    const data = new FormData();
+    data.append('file', { uri, type: 'audio/wav', name: 'input.wav' } as any);
+    console.log('Uploading audio:', uri);
+    try {
+      const { data: resp } = await axios.post<AudioResponse>(`${BACKEND_URL}/process_audio/`, data, { headers: { 'Content-Type': 'multipart/form-data' } });
+      handleAudioResponse(resp);
+    } catch (e) {
+      console.error('Audio upload error', e);
+      appendMessage('Error sending audio. Listening again.', 'assistant');
+      setTimeout(resumePorcupine, 2000);
+    }
+  };
+
+  const handleAudioResponse = async (resp: AudioResponse) => {
+    appendMessage(resp.transcript, 'user');
+    appendMessage('Processing response...', 'Jarvis');
+    if (resp.data1.Record) {
+      appendMessage('Opening video recorder...', 'Jarvis');
+      // Show the video recorder modal
+      setShowVideo(true);
+    } else {
+      console.log('🔈 Playing TTS audio');
+      await pausePorcupine();
+      appendMessage(resp.data2, 'Jarvis');
+      try {
+        const url = `${BACKEND_URL}${resp.data3}`;
+        SoundPlayer.playUrl(url);
+        SoundPlayer.addEventListener('FinishedPlaying', () => {
+          console.log('🔊 Audio playback finished');
+          // Resume wake-word listening after TTS playback
+          resumePorcupine();
+        });
+      } catch (e) {
+        console.error('Audio play error:', e);
+        resumePorcupine();
+      }
+    }
+  };
+
+  // Video handling
+  const handleVideoRecorded = async (uri: string) => {
+    console.log('Video path:', uri);
+    setShowVideo(false);
+    setLastVideoUri(uri);
+    appendMessage('Video captured. Sending to server...', 'Jarvis');
+    const fileUri = Platform.OS === 'android' ? uri : uri.replace('file://', '');
+    const data = new FormData();
+    data.append('file', { uri: fileUri, type: 'video/mp4', name: 'capture.mp4' } as any);
+    try {
+      const { data: resp } = await axios.post(`${BACKEND_URL}/process_video/`, data , {/* headers: { 'Content-Type': 'multipart/form-data' } */});
+      appendMessage(`Here's what I see: ${resp.text_summary}`, 'Jarvis');
+      await pausePorcupine();
+      try {
+        SoundPlayer.playUrl(`${BACKEND_URL}${resp.audio_file}`);
+        SoundPlayer.addEventListener('FinishedPlaying', resumePorcupine);
+      } catch {
+        resumePorcupine();
+      }
+    } catch (e) {
+      console.error('Video upload error', e);
+      appendMessage('Error processing video.', 'assistant');
+      setTimeout(resumePorcupine, 2000);
+    }
+  };
+
+  // UI render
   return (
-    <View style={[styles.container, style]}>
-      <ScrollView style={styles.messagesContainer}>
-        {messages.map((message, index) => (
-          <View
-            key={index}
-            style={[
-              styles.messageBubble,
-              message.sender === 'user' ? styles.userMessage : styles.jarvisMessage
-            ]}
-          >
-            <Text style={styles.messageText}>{message.text}</Text>
+    <View style={[styles.container, style]}>  
+      <ScrollView style={styles.chatContainer} contentContainerStyle={styles.chatContent}>
+        {messages.map((msg, idx) => (
+          <View key={idx} style={[styles.bubble, msg.sender === 'user' ? styles.userBubble : styles.jarvisBubble]}>  
+            <Text style={styles.bubbleText}>{msg.text}</Text>
           </View>
         ))}
-
-        {/* Video preview */}
-        {lastVideoPath && (
-          <View style={{ marginVertical: 10, alignItems: 'center' }}>
-            <Text style={{ marginBottom: 4 }}>Your Recorded Video:</Text>
-            <Video
-              source={{ uri: lastVideoPath }}
-              style={{ width: 320, height: 180, borderRadius: 10 }}
-              controls
-              resizeMode="contain"
-              paused={false}
-              repeat={true}
-            />
-          </View>
+        {lastVideoUri && (
+          <Video source={{ uri: lastVideoUri }} style={styles.video} controls resizeMode="contain" />
         )}
       </ScrollView>
 
-      <View style={styles.recorderContainer}>
-        <Text style={styles.timer}>{formatTime(recordingTime)}</Text>
-        <Text style={styles.status}>
-          {isRecording ? 'Recording...' : 'Say "Jarvis" to start recording'}
-        </Text>
+      <View style={styles.statusBar}>
+        <Text style={styles.statusText}>{isRecording ? 'Recording…' : 'Say "Jarvis" to chat'}</Text>
       </View>
 
-      {/* Video recorder modal */}
       <VideoRecorder
-        visible={showVideoRecorder}
-        onClose={() => setShowVideoRecorder(false)}
+        visible={showVideo}
+        onClose={() => setShowVideo(false)}
         onVideoRecorded={handleVideoRecorded}
       />
     </View>
@@ -734,47 +242,16 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-  },
-  messagesContainer: {
-    flex: 1,
-    marginBottom: 20,
-  },
-  recorderContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  messageBubble: {
-    padding: 10,
-    borderRadius: 10,
-    marginVertical: 5,
-    maxWidth: '80%',
-  },
-  userMessage: {
-    backgroundColor: '#e3f2fd',
-    alignSelf: 'flex-end',
-  },
-  jarvisMessage: {
-    backgroundColor: '#f5f5f5',
-    alignSelf: 'flex-start',
-  },
-  messageText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  timer: {
-    fontSize: 24,
-    marginBottom: 20,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    color: '#333',
-  },
-  status: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-  }
+  container: { flex: 1, backgroundColor: '#f0f4f7', padding: 16 },
+  chatContainer: { flex: 1 },
+  chatContent: { paddingBottom: 20 },
+  bubble: { marginVertical: 4, padding: 10, borderRadius: 12, maxWidth: '80%' },
+  userBubble: { backgroundColor: '#d1e7dd', alignSelf: 'flex-end' },
+  jarvisBubble: { backgroundColor: '#ffffff', alignSelf: 'flex-start' },
+  bubbleText: { fontSize: 16, color: '#333' },
+  video: { width: '100%', height: 200, borderRadius: 8, marginTop: 8 },
+  statusBar: { paddingVertical: 8, borderTopWidth: 1, borderColor: '#ccc' },
+  statusText: { textAlign: 'center', color: '#666' }
 });
 
 export default AudioRecorder;

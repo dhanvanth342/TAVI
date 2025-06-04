@@ -338,9 +338,8 @@ const styles = StyleSheet.create({
 
 export default VideoRecorder;
 
+
 */
-
-
 
 import React, { useRef, useState, useEffect } from 'react';
 import { View, Modal, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, PermissionsAndroid } from 'react-native';

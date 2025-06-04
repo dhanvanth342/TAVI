@@ -30,6 +30,23 @@ app.add_middleware(
 processor = SurroundingAwarenessProcessor()
 audio_processor = AudioProcessing()
 
+@app.get("/")
+async def root():
+    """
+    Root endpoint for connectivity testing from the React Native app.
+    """
+    return {
+        "message": "Surrounding Awareness API is running", 
+        "status": "ok",
+        "version": "1.0.0",
+        "endpoints": [
+            "/process_video/",
+            "/process_audio/", 
+            "/download_audio/{filename}",
+            "/health"
+        ]
+    }
+
 @app.post("/process_video/")
 async def process_video(file: UploadFile = File(...)):
     """

@@ -15,7 +15,8 @@ const WelcomeScreen = () => {
   const [currentText, setCurrentText] = useState(greetings[0].text);
   const [isMicActive, setIsMicActive] = useState(false);
   const [debugInfo, setDebugInfo] = useState('');
-  const [showRecorder, setShowRecorder] = useState(false); // 🚩 Add state to control AudioRecorder visibility
+  const [showRecorder, setShowRecorder] = useState(false);
+  const [greetingsCompleted, setGreetingsCompleted] = useState(false);
 
   useEffect(() => {
     AudioManager.preloadAll();
@@ -27,14 +28,18 @@ const WelcomeScreen = () => {
         if (currentIndex < greetings.length) {
           const { key, text } = greetings[currentIndex];
           setCurrentText(text);
+          console.log(`🎵 Playing greeting: ${key}`);
           currentIndex++;
 
           // Play greeting sound, then play next after a short pause
           AudioManager.play(key, () => {
+            console.log(`✅ Finished playing: ${key}`);
             setTimeout(playNext, 500);
           });
         } else {
-          // 🚩 All greetings done! Show AudioRecorder and start wake word listening
+          // 🆕 All greetings done! 
+          console.log('🎉 All greetings completed!');
+          setGreetingsCompleted(true);
           setShowRecorder(true);
         }
       };
@@ -65,12 +70,14 @@ const WelcomeScreen = () => {
   };
 
   const testMicrophone = async () => {
-    // Implementation of testMicrophone
+    console.log('🎯 WelcomeScreen: Triggering microphone test...');
+    // The actual test will be handled by AudioRecorder
   };
 
   const checkPorcupineStatus = async (): Promise<boolean> => {
-    // Implementation of checkPorcupineStatus
-    return true; // or false based on your logic
+    console.log('🎯 WelcomeScreen: Checking Porcupine status...');
+    // The actual check will be handled by AudioRecorder
+    return true;
   };
 
   return (
@@ -86,30 +93,16 @@ const WelcomeScreen = () => {
             {debugInfo}
           </Text>
         </View>
-        {/* 🚩 Only show AudioRecorder after greetings finish */}
         {showRecorder && (
           <AudioRecorder 
             porcupineAccessKey={PORCUPINE_ACCESS_KEY}
             onRecordingComplete={handleRecordingComplete}
             onMicStatusChange={handleMicStatus}
-            onTestMicrophone={testMicrophone}
-            onCheckPorcupineStatus={checkPorcupineStatus}
             style={styles.recorder}
+            greetingsCompleted={greetingsCompleted}
           />
         )}
-        <TouchableOpacity 
-          style={styles.testButton}
-          onPress={async () => {
-            console.log('Running diagnostic tests...');
-            if (testMicrophone && checkPorcupineStatus) {
-              await testMicrophone();
-              const isListening = await checkPorcupineStatus();
-              setDebugInfo(`Mic: Working, Porcupine: ${isListening ? 'Listening' : 'Not Listening'}`);
-            }
-          }}
-        >
-          <Text style={styles.testButtonText}>Run Diagnostic Tests</Text>
-        </TouchableOpacity>
+
       </View>
     </SafeAreaView>
   );
